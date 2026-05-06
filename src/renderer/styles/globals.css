@@ -1,0 +1,106 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 0 0% 98%;
+    --foreground: 24 10% 10%;
+    --card: 0 0% 100%;
+    --card-foreground: 24 10% 10%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 24 10% 10%;
+    --primary: 211 74% 51%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 0 0% 96%;
+    --secondary-foreground: 24 10% 10%;
+    --muted: 0 0% 96%;
+    --muted-foreground: 24 5% 46%;
+    --accent: 0 0% 96%;
+    --accent-foreground: 24 10% 10%;
+    --destructive: 0 72% 55%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 48 6% 90%;
+    --input: 48 6% 90%;
+    --ring: 211 74% 51%;
+    --radius: 0.5rem;
+  }
+
+  .dark {
+    --background: 24 10% 10%;
+    --foreground: 0 0% 95%;
+    --card: 24 8% 12%;
+    --card-foreground: 0 0% 95%;
+    --popover: 24 8% 12%;
+    --popover-foreground: 0 0% 95%;
+    --primary: 211 74% 51%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 24 6% 16%;
+    --secondary-foreground: 0 0% 95%;
+    --muted: 24 6% 16%;
+    --muted-foreground: 24 5% 55%;
+    --accent: 24 6% 16%;
+    --accent-foreground: 0 0% 95%;
+    --destructive: 0 62% 45%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 24 6% 18%;
+    --input: 24 6% 18%;
+    --ring: 211 74% 51%;
+  }
+
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+    font-feature-settings: 'rlig' 1, 'calt' 1;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+}
+
+/* Scrollbar styles (macOS-like) */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(55, 53, 47, 0);
+  border-radius: 4px;
+}
+
+*:hover::-webkit-scrollbar-thumb {
+  background: rgba(55, 53, 47, 0.18);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(55, 53, 47, 0.32) !important;
+}
+
+/* Frameless window drag region */
+[data-tauri-drag-region],
+.app-drag-region {
+  -webkit-app-region: drag;
+}
+
+/* Task item animations */
+.task-enter {
+  animation: task-enter 0.2s ease-out;
+}
+
+@keyframes task-enter {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}

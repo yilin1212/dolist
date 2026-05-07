@@ -8,6 +8,12 @@ interface TagStore {
   deleteTag: (id: string) => Promise<void>
 }
 
+function notifyTasksChanged(): void {
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('tasks:changed'))
+  }
+}
+
 export const useTagStore = create<TagStore>((set, get) => ({
   tags: [],
   fetchTags: async () => {
@@ -25,5 +31,7 @@ export const useTagStore = create<TagStore>((set, get) => ({
   deleteTag: async (id) => {
     await window.electronAPI.tags.delete(id)
     await get().fetchTags()
+    // Tasks may still reference this tag; refresh other views
+    notifyTasksChanged()
   },
 }))

@@ -1,37 +1,88 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Plus, Search } from 'lucide-react'
+import { useHotkeys } from 'react-hotkeys-hook'
+import { isSameDay, parseISO } from 'date-fns'
 import { useTaskStore } from '../store'
+import { useScheduleStore } from '../../schedule/store'
 import TaskItem from './TaskItem'
 import TaskForm from './TaskForm'
 import ScheduleDialog from './ScheduleDialog'
 import { Button } from '../../../components/ui/button'
 import { Input } from '../../../components/ui/input'
 import { ScrollArea } from '../../../components/ui/scroll-area'
+import { useTranslation } from '../../../i18n'
+import type { Task } from '../../../../types/models'
 
 interface TaskListProps {
   title: string
   subtitle?: string
+  // 'inbox' = list==='inbox'; 'today' = list==='today' / due today / scheduled today; undefined = all
   listFilter?: string
   showFilters?: boolean
+  // Hide done tasks (Inbox / Today). Default true.
+  hideDone?: boolean
 }
 
-export default function TaskList({ title, subtitle, listFilter, showFilters = true }: TaskListProps) {
+export default function TaskList({ title, subtitle, listFilter, showFilters = true, hideDone = true }: TaskListProps) {
+  const { t } = useTranslation()
   const { tasks, filters, loading, fetchTasks, setFilters } = useTaskStore()
+  const { blocks, loadRange } = useScheduleStore()
   const [showForm, setShowForm] = useState(false)
-  const [editingTask, setEditingTask] = useState<any>(null)
-  const [schedulingTask, setSchedulingTask] = useState<any>(null)
+  const [editingTask, setEditingTask] = useState<Task | null>(null)
+  const [schedulingTask, setSchedulingTask] = useState<Task | null>(null)
 
   useEffect(() => {
-    if (listFilter) {
-      setFilters({ list: listFilter })
-    }
     fetchTasks()
+    if (listFilter === 'today') {
+      // Make sure schedule blocks for today are available so we can include
+      // tasks that have been scheduled for today.
+      const now = new Date()
+      const start = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString()
+      const end = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1).toISOString()
+      loadRange(start, end)
+    }
   }, [listFilter])
 
-  const filteredTasks = tasks.filter((t) => {
+  useHotkeys('ctrl+n, meta+n', (e) => {
+    e.preventDefault()
+    setEditingTask(null)
+    setShowForm(true)
+  })
+
+  // Tasks that have at least one schedule block today.
+  const scheduledTodayIds = useMemo(() => {
+    const today = new Date()
+    const ids = new Set<string>()
+    for (const b of blocks) {
+      try {
+        if (isSameDay(parseISO(b.start_time), today)) ids.add(b.task_id)
+      } catch { /* skip invalid */ }
+    }
+    return ids
+  }, [blocks])
+
+  // Filter on the client by listFilter so we don't pollute the global store
+  // filters (other views like Kanban / Matrix / Timeline read from the same store).
+  const scopedTasks = tasks.filter((task) => {
+    if (hideDone && (task.status === 'done' || task.status === 'cancelled')) return false
+    if (!listFilter) return true
+    if (listFilter === 'today') {
+      if (task.list === 'today') return true
+      if (task.due_date) {
+        try {
+          if (isSameDay(parseISO(task.due_date), new Date())) return true
+        } catch { /* invalid date */ }
+      }
+      if (scheduledTodayIds.has(task.id)) return true
+      return false
+    }
+    return task.list === listFilter
+  })
+
+  const filteredTasks = scopedTasks.filter((task) => {
     if (filters.search) {
       const q = filters.search.toLowerCase()
-      if (!t.title.toLowerCase().includes(q) && !t.description.toLowerCase().includes(q)) {
+      if (!task.title.toLowerCase().includes(q) && !task.description.toLowerCase().includes(q)) {
         return false
       }
     }
@@ -52,7 +103,7 @@ export default function TaskList({ title, subtitle, listFilter, showFilters = tr
           <div className="relative flex-1">
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-neutral-500" />
             <Input
-              placeholder="搜索任务..."
+              placeholder={t('common.search')}
               className="pl-9"
               value={filters.search}
               onChange={(e) => setFilters({ search: e.target.value })}
@@ -61,7 +112,7 @@ export default function TaskList({ title, subtitle, listFilter, showFilters = tr
         )}
         <Button onClick={() => { setEditingTask(null); setShowForm(true) }}>
           <Plus className="mr-1.5 h-4 w-4" />
-          新建任务
+          {t('tasks.newTask')}
         </Button>
       </div>
 
@@ -69,12 +120,12 @@ export default function TaskList({ title, subtitle, listFilter, showFilters = tr
       <ScrollArea className="flex-1">
         {loading ? (
           <div className="flex items-center justify-center py-20 text-neutral-500">
-            加载中...
+            {t('common.loading')}
           </div>
         ) : filteredTasks.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-20 text-neutral-500">
-            <p className="text-sm">暂无任务</p>
-            <p className="mt-1 text-xs">点击「新建任务」开始</p>
+            <p className="text-sm">{t('common.noTasks')}</p>
+            <p className="mt-1 text-xs">{t('common.createToStart')}</p>
           </div>
         ) : (
           <div className="space-y-1">
@@ -94,6 +145,7 @@ export default function TaskList({ title, subtitle, listFilter, showFilters = tr
       <TaskForm
         open={showForm}
         task={editingTask}
+        defaultList={listFilter}
         onClose={() => { setShowForm(false); setEditingTask(null) }}
       />
 
@@ -102,7 +154,7 @@ export default function TaskList({ title, subtitle, listFilter, showFilters = tr
         open={!!schedulingTask}
         task={schedulingTask}
         onClose={() => setSchedulingTask(null)}
-        onScheduled={() => { setSchedulingTask(null); fetchTasks() }}
+        onScheduled={() => { setSchedulingTask(null) }}
       />
     </div>
   )

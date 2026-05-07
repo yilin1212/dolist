@@ -17,13 +17,18 @@ export function showPomodoroMini(url: string): void {
   miniWindow = new BrowserWindow({
     width: winWidth,
     height: winHeight,
+    minWidth: 200,
+    minHeight: 90,
+    maxWidth: 600,
+    maxHeight: 300,
     x: screenWidth - winWidth - 20,
     y: screenHeight - winHeight - 20,
     alwaysOnTop: true,
     frame: false,
     skipTaskbar: true,
-    resizable: false,
+    resizable: true,
     transparent: true,
+    hasShadow: false,
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       nodeIntegration: false,
@@ -43,4 +48,8 @@ export function hidePomodoroMini(): void {
     miniWindow.close()
   }
   miniWindow = null
+}
+
+export function getPomodoroMini(): BrowserWindow | null {
+  return miniWindow && !miniWindow.isDestroyed() ? miniWindow : null
 }

@@ -1,14 +1,12 @@
+import { useState } from 'react'
 import { Timer, Calendar, Pencil, Trash2 } from 'lucide-react'
 import { useTaskStore } from '../store'
 import { usePomodoroStore } from '../../pomodoro/store'
 import type { Task } from '../../../../types/models'
 import { cn } from '../../../lib/utils'
-
-interface TaskItemProps {
-  task: Task
-  onEdit: (task: Task) => void
-  onSchedule: (task: Task) => void
-}
+import { useTranslation } from '../../../i18n'
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '../../../components/ui/dialog'
+import { Button } from '../../../components/ui/button'
 
 const PRIORITY_COLORS: Record<number, string> = {
   1: 'bg-neutral-500',
@@ -17,16 +15,24 @@ const PRIORITY_COLORS: Record<number, string> = {
   4: 'bg-destructive-500',
 }
 
-const PRIORITY_LABELS: Record<number, string> = {
-  1: '低',
-  2: '中',
-  3: '高',
-  4: '紧急',
+interface TaskItemProps {
+  task: Task
+  onEdit: (task: Task) => void
+  onSchedule: (task: Task) => void
 }
 
 export default function TaskItem({ task, onEdit, onSchedule }: TaskItemProps) {
+  const { t, locale } = useTranslation()
   const { markDone, markPending, deleteTask } = useTaskStore()
   const { startFocus } = usePomodoroStore()
+  const [confirmDelete, setConfirmDelete] = useState(false)
+
+  const PRIORITY_LABELS: Record<number, string> = {
+    1: t('tasks.priorityLabel.low'),
+    2: t('tasks.priorityLabel.normal'),
+    3: t('tasks.priorityLabel.high'),
+    4: t('tasks.priorityLabel.urgent'),
+  }
   const isDone = task.status === 'done'
 
   const handleToggle = () => {
@@ -105,7 +111,7 @@ export default function TaskItem({ task, onEdit, onSchedule }: TaskItemProps) {
       {/* Due date */}
       {task.due_date && (
         <span className="text-xs text-neutral-500">
-          {new Date(task.due_date).toLocaleDateString('zh-CN', { month: 'short', day: 'numeric' })}
+          {new Date(task.due_date).toLocaleDateString(locale, { month: 'short', day: 'numeric' })}
         </span>
       )}
 
@@ -114,32 +120,52 @@ export default function TaskItem({ task, onEdit, onSchedule }: TaskItemProps) {
         <button
           onClick={() => startFocus(task.estimated_minutes || 25, task.id)}
           className="rounded p-1 text-neutral-500 hover:bg-neutral-150 hover:text-neutral-900"
-          title="开始番茄钟"
+          title={t('common.startPomodoro')}
         >
           <Timer size={14} />
         </button>
         <button
           onClick={() => onSchedule(task)}
           className="rounded p-1 text-neutral-500 hover:bg-neutral-150 hover:text-neutral-900"
-          title="安排日程"
+          title={t('common.schedule')}
         >
           <Calendar size={14} />
         </button>
         <button
           onClick={() => onEdit(task)}
           className="rounded p-1 text-neutral-500 hover:bg-neutral-150 hover:text-neutral-900"
-          title="编辑"
+          title={t('common.edit')}
         >
           <Pencil size={14} />
         </button>
         <button
-          onClick={() => deleteTask(task.id)}
+          onClick={() => setConfirmDelete(true)}
           className="rounded p-1 text-neutral-500 hover:bg-destructive-50 hover:text-destructive-500"
-          title="删除"
+          title={t('common.delete')}
         >
           <Trash2 size={14} />
         </button>
       </div>
+
+      <Dialog open={confirmDelete} onOpenChange={setConfirmDelete}>
+        <DialogContent className="sm:max-w-[360px]">
+          <DialogHeader>
+            <DialogTitle>{t('common.delete')}</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-neutral-600">{t('tasks.deleteConfirm')}</p>
+          <DialogFooter className="mt-4">
+            <Button variant="ghost" onClick={() => setConfirmDelete(false)}>
+              {t('common.cancel')}
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() => { deleteTask(task.id); setConfirmDelete(false) }}
+            >
+              {t('common.delete')}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

@@ -5,14 +5,25 @@ import { Button } from '../../../components/ui/button'
 import { Input } from '../../../components/ui/input'
 import { Textarea } from '../../../components/ui/textarea'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '../../../components/ui/dialog'
+import { useTranslation } from '../../../i18n'
 
 interface TaskFormProps {
   open: boolean
   task?: Task | null
+  defaultList?: string
   onClose: () => void
 }
 
-export default function TaskForm({ open, task, onClose }: TaskFormProps) {
+function todayString(): string {
+  const d = new Date()
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${y}-${m}-${day}`
+}
+
+export default function TaskForm({ open, task, defaultList, onClose }: TaskFormProps) {
+  const { t } = useTranslation()
   const { createTask, updateTask } = useTaskStore()
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
@@ -35,10 +46,10 @@ export default function TaskForm({ open, task, onClose }: TaskFormProps) {
       setDescription('')
       setPriority(2)
       setEstimatedMinutes(0)
-      setDueDate('')
+      setDueDate(defaultList === 'today' ? todayString() : '')
       setTagsInput('')
     }
-  }, [task, open])
+  }, [task, open, defaultList])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -70,7 +81,7 @@ export default function TaskForm({ open, task, onClose }: TaskFormProps) {
           due_date: dueDate || null,
           tags,
           status: 'pending',
-          list: 'inbox',
+          list: defaultList || 'inbox',
         })
       }
       onClose()
@@ -84,19 +95,19 @@ export default function TaskForm({ open, task, onClose }: TaskFormProps) {
       <DialogContent className="sm:max-w-[480px]">
         <form onSubmit={handleSubmit}>
           <DialogHeader>
-            <DialogTitle>{task ? '编辑任务' : '新建任务'}</DialogTitle>
+            <DialogTitle>{task ? t('common.edit') + t('tasks.title') : t('tasks.newTask')}</DialogTitle>
           </DialogHeader>
 
           <div className="mt-4 space-y-4">
             {/* Title */}
             <div>
               <label className="mb-1.5 block text-sm font-medium text-neutral-700">
-                任务标题 <span className="text-destructive-500">*</span>
+                {t('tasks.title')} <span className="text-destructive-500">*</span>
               </label>
               <Input
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
-                placeholder="输入任务标题..."
+                placeholder={t('tasks.titlePlaceholder')}
                 autoFocus
                 required
               />
@@ -104,11 +115,11 @@ export default function TaskForm({ open, task, onClose }: TaskFormProps) {
 
             {/* Description */}
             <div>
-              <label className="mb-1.5 block text-sm font-medium text-neutral-700">描述</label>
+              <label className="mb-1.5 block text-sm font-medium text-neutral-700">{t('tasks.description')}</label>
               <Textarea
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
-                placeholder="添加任务描述..."
+                placeholder={t('tasks.descriptionPlaceholder')}
                 rows={3}
               />
             </div>
@@ -116,21 +127,21 @@ export default function TaskForm({ open, task, onClose }: TaskFormProps) {
             {/* Priority & Estimated time row */}
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="mb-1.5 block text-sm font-medium text-neutral-700">优先级</label>
+                <label className="mb-1.5 block text-sm font-medium text-neutral-700">{t('tasks.priority')}</label>
                 <select
                   className="w-full rounded-md border border-neutral-200 bg-white px-3 py-2 text-sm focus:border-primary-500 focus:outline-none"
                   value={priority}
                   onChange={(e) => setPriority(Number(e.target.value))}
                 >
-                  <option value={1}>低</option>
-                  <option value={2}>中</option>
-                  <option value={3}>高</option>
-                  <option value={4}>紧急</option>
+                  <option value={1}>{t('tasks.priorityLabel.low')}</option>
+                  <option value={2}>{t('tasks.priorityLabel.normal')}</option>
+                  <option value={3}>{t('tasks.priorityLabel.high')}</option>
+                  <option value={4}>{t('tasks.priorityLabel.urgent')}</option>
                 </select>
               </div>
               <div>
                 <label className="mb-1.5 block text-sm font-medium text-neutral-700">
-                  预估时间 (分钟)
+                  {t('tasks.estimatedTime')}
                 </label>
                 <Input
                   type="number"
@@ -144,7 +155,7 @@ export default function TaskForm({ open, task, onClose }: TaskFormProps) {
             {/* Due date & Tags row */}
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="mb-1.5 block text-sm font-medium text-neutral-700">截止日期</label>
+                <label className="mb-1.5 block text-sm font-medium text-neutral-700">{t('tasks.dueDate')}</label>
                 <Input
                   type="date"
                   value={dueDate}
@@ -152,11 +163,11 @@ export default function TaskForm({ open, task, onClose }: TaskFormProps) {
                 />
               </div>
               <div>
-                <label className="mb-1.5 block text-sm font-medium text-neutral-700">标签</label>
+                <label className="mb-1.5 block text-sm font-medium text-neutral-700">{t('tasks.tags')}</label>
                 <Input
                   value={tagsInput}
                   onChange={(e) => setTagsInput(e.target.value)}
-                  placeholder="标签1, 标签2..."
+                  placeholder={t('tasks.tagsPlaceholder')}
                 />
               </div>
             </div>
@@ -164,10 +175,10 @@ export default function TaskForm({ open, task, onClose }: TaskFormProps) {
 
           <DialogFooter className="mt-6">
             <Button type="button" variant="ghost" onClick={onClose}>
-              取消
+              {t('common.cancel')}
             </Button>
             <Button type="submit" disabled={saving || !title.trim()}>
-              {saving ? '保存中...' : task ? '保存' : '创建'}
+              {saving ? t('common.saving') : task ? t('common.save') : t('common.create')}
             </Button>
           </DialogFooter>
         </form>

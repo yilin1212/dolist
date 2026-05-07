@@ -3,8 +3,10 @@ import { PageHeader } from '../../components/ui/page-header'
 import { Card, CardHeader, CardTitle, CardContent } from '../../components/ui/card'
 import { Input } from '../../components/ui/input'
 import { Button } from '../../components/ui/button'
+import { useTranslation } from '../../i18n'
 
 export default function SettingsPage() {
+  const { t } = useTranslation()
   const [settings, setSettings] = useState({
     pomodoro_focus_min: 25,
     pomodoro_short_break_min: 5,
@@ -46,18 +48,18 @@ export default function SettingsPage() {
 
   return (
     <div className="flex h-full flex-col p-6">
-      <PageHeader title="设置" />
+      <PageHeader title={t('settings.title')} />
 
       <div className="flex-1 overflow-y-auto space-y-4">
         {/* Pomodoro settings */}
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">番茄钟参数</CardTitle>
+            <CardTitle className="text-base">{t('settings.pomodoroParams')}</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="mb-1.5 block text-sm font-medium text-neutral-700">专注时长 (分钟)</label>
+                <label className="mb-1.5 block text-sm font-medium text-neutral-700">{t('settings.focusDuration')}</label>
                 <Input
                   type="number"
                   min={1}
@@ -66,7 +68,7 @@ export default function SettingsPage() {
                 />
               </div>
               <div>
-                <label className="mb-1.5 block text-sm font-medium text-neutral-700">短休息 (分钟)</label>
+                <label className="mb-1.5 block text-sm font-medium text-neutral-700">{t('settings.shortBreak')}</label>
                 <Input
                   type="number"
                   min={1}
@@ -75,7 +77,7 @@ export default function SettingsPage() {
                 />
               </div>
               <div>
-                <label className="mb-1.5 block text-sm font-medium text-neutral-700">长休息 (分钟)</label>
+                <label className="mb-1.5 block text-sm font-medium text-neutral-700">{t('settings.longBreak')}</label>
                 <Input
                   type="number"
                   min={1}
@@ -84,7 +86,7 @@ export default function SettingsPage() {
                 />
               </div>
               <div>
-                <label className="mb-1.5 block text-sm font-medium text-neutral-700">长休息间隔</label>
+                <label className="mb-1.5 block text-sm font-medium text-neutral-700">{t('settings.longBreakInterval')}</label>
                 <Input
                   type="number"
                   min={1}
@@ -99,12 +101,12 @@ export default function SettingsPage() {
         {/* Work hours */}
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">工作时间</CardTitle>
+            <CardTitle className="text-base">{t('settings.workHours')}</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="mb-1.5 block text-sm font-medium text-neutral-700">开始时间</label>
+                <label className="mb-1.5 block text-sm font-medium text-neutral-700">{t('settings.startTime')}</label>
                 <Input
                   type="number"
                   min={0}
@@ -114,7 +116,7 @@ export default function SettingsPage() {
                 />
               </div>
               <div>
-                <label className="mb-1.5 block text-sm font-medium text-neutral-700">结束时间</label>
+                <label className="mb-1.5 block text-sm font-medium text-neutral-700">{t('settings.endTime')}</label>
                 <Input
                   type="number"
                   min={0}
@@ -130,7 +132,7 @@ export default function SettingsPage() {
         {/* Language */}
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">语言 / Language</CardTitle>
+            <CardTitle className="text-base">{t('settings.language')}</CardTitle>
           </CardHeader>
           <CardContent>
             <select

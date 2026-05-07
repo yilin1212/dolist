@@ -3,6 +3,7 @@ import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable'
 import KanbanCard from './KanbanCard'
 import type { Task } from '../../../../../types/models'
 import { cn } from '../../../lib/utils'
+import { useTranslation } from '../../../i18n'
 
 interface KanbanColumnProps {
   id: string
@@ -13,6 +14,7 @@ interface KanbanColumnProps {
 }
 
 export default function KanbanColumn({ id, title, tasks, count, onEditTask }: KanbanColumnProps) {
+  const { t } = useTranslation()
   const { setNodeRef, isOver } = useDroppable({ id })
 
   return (
@@ -35,7 +37,7 @@ export default function KanbanColumn({ id, title, tasks, count, onEditTask }: Ka
             <KanbanCard key={task.id} task={task} onEdit={() => onEditTask(task)} />
           ))}
           {tasks.length === 0 && (
-            <p className="py-8 text-center text-xs text-neutral-500">暂无任务</p>
+            <p className="py-8 text-center text-xs text-neutral-500">{t('common.noTasks')}</p>
           )}
         </div>
       </SortableContext>

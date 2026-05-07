@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { useTaskStore } from '../tasks/store'
 
 interface PomodoroState {
   state: string
@@ -15,6 +16,15 @@ interface PomodoroState {
   resume: () => Promise<void>
   stop: () => Promise<void>
   subscribe: () => () => void
+}
+
+function notifyTasksChanged(): void {
+  // Pull a fresh task list (main process may have moved status to/from 'doing'),
+  // and let any other store that cares (e.g. ScheduleStore) react too.
+  useTaskStore.getState().fetchTasks()
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('tasks:changed'))
+  }
 }
 
 export const usePomodoroStore = create<PomodoroState>((set, get) => ({
@@ -44,6 +54,8 @@ export const usePomodoroStore = create<PomodoroState>((set, get) => ({
   startFocus: async (minutes, taskId, blockId) => {
     await window.electronAPI.pomodoro.startFocus(minutes, taskId, blockId)
     await get().fetchState()
+    // The main process may have moved the task to 'doing' — refresh views
+    notifyTasksChanged()
   },
 
   startBreak: async (kind = 'short_break') => {
@@ -62,6 +74,7 @@ export const usePomodoroStore = create<PomodoroState>((set, get) => ({
   stop: async () => {
     await window.electronAPI.pomodoro.stop()
     await get().fetchState()
+    notifyTasksChanged()
   },
 
   subscribe: () => {
@@ -69,9 +82,18 @@ export const usePomodoroStore = create<PomodoroState>((set, get) => ({
       set({ remainingSec: data.remaining, totalSec: data.total })
     })
     const unsubState = window.electronAPI.pomodoro.onStateChanged((state) => {
+      const prev = get().state
       set({ state })
       get().fetchState()
+      // When state transitions involve idle (start or end), task status may
+      // have been changed by the main process — refresh views.
+      if (prev !== state && (prev === 'idle' || state === 'idle')) {
+        notifyTasksChanged()
+      }
     })
-    return () => { unsubTick(); unsubState() }
+    const unsubFinished = window.electronAPI.pomodoro.onSessionFinished(() => {
+      notifyTasksChanged()
+    })
+    return () => { unsubTick(); unsubState(); unsubFinished() }
   },
 }))

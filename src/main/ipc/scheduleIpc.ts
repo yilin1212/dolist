@@ -6,6 +6,7 @@ export function registerScheduleIpc(): void {
     ScheduleRepo.listBetween(start, end)
   )
   ipcMain.handle('schedule:listToday', () => ScheduleRepo.listToday())
+  ipcMain.handle('schedule:listByTask', (_, taskId: string) => ScheduleRepo.listByTask(taskId))
   ipcMain.handle('schedule:create', (_, block) => ScheduleRepo.create(block))
   ipcMain.handle('schedule:update', (_, block) => ScheduleRepo.update(block))
   ipcMain.handle('schedule:delete', (_, id: string) => ScheduleRepo.delete(id))

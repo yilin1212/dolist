@@ -45,6 +45,14 @@ export class PomodoroTimer extends EventEmitter {
       status: 'running',
     })
 
+    // Move the focused task into the 'doing' kanban column while focus is active
+    if (taskId) {
+      const task = TaskRepo.get(taskId)
+      if (task && task.status === 'pending') {
+        TaskRepo.update({ ...task, status: 'doing' })
+      }
+    }
+
     this._state = PomodoroTimer.STATE_FOCUSING
     this._startInterval()
     this.emit('stateChanged', this._state)
@@ -58,6 +66,8 @@ export class PomodoroTimer extends EventEmitter {
       ? SettingsRepo.getInt('pomodoro_long_break_min', 15)
       : SettingsRepo.getInt('pomodoro_short_break_min', 5)
     const clamped = Math.max(1, minutes)
+    this._taskId = null
+    this._blockId = null
     this._kind = kind
     this._totalSec = clamped * 60
     this._remainingSec = this._totalSec
@@ -75,8 +85,11 @@ export class PomodoroTimer extends EventEmitter {
     return true
   }
 
+  private _pausedFrom = PomodoroTimer.STATE_FOCUSING
+
   pause(): void {
-    if (this._state !== PomodoroTimer.STATE_FOCUSING) return
+    if (this._state !== PomodoroTimer.STATE_FOCUSING && this._state !== PomodoroTimer.STATE_BREAK) return
+    this._pausedFrom = this._state
     this._stopInterval()
     this._state = PomodoroTimer.STATE_PAUSED
     this.emit('stateChanged', this._state)
@@ -85,7 +98,7 @@ export class PomodoroTimer extends EventEmitter {
   resume(): void {
     if (this._state !== PomodoroTimer.STATE_PAUSED) return
     this._startInterval()
-    this._state = PomodoroTimer.STATE_FOCUSING
+    this._state = this._pausedFrom
     this.emit('stateChanged', this._state)
   }
 
@@ -99,6 +112,14 @@ export class PomodoroTimer extends EventEmitter {
       TaskRepo.addActualMinutes(this._taskId, elapsedMin)
     }
 
+    // Revert task back to pending if it was bumped to 'doing' by this timer
+    if (this._kind === PomodoroTimer.KIND_FOCUS && this._taskId) {
+      const task = TaskRepo.get(this._taskId)
+      if (task && task.status === 'doing') {
+        TaskRepo.update({ ...task, status: 'pending' })
+      }
+    }
+
     if (this._sessionId) {
       this._markSessionStatus(this._sessionId, 'cancelled', elapsedMin)
     }
@@ -106,7 +127,7 @@ export class PomodoroTimer extends EventEmitter {
     const finishedKind = this._kind
     const finishedId = this._sessionId
     this._resetState()
-    if (finishedId) this.emit('sessionFinished', { id: finishedId, kind: finishedKind })
+    if (finishedId) this.emit('sessionCancelled', { id: finishedId, kind: finishedKind })
   }
 
   private _startInterval(): void {
@@ -134,7 +155,14 @@ export class PomodoroTimer extends EventEmitter {
     const elapsedMin = Math.floor(this._totalSec / 60)
 
     if (this._kind === PomodoroTimer.KIND_FOCUS) {
-      if (this._taskId) TaskRepo.addActualMinutes(this._taskId, elapsedMin)
+      if (this._taskId) {
+        TaskRepo.addActualMinutes(this._taskId, elapsedMin)
+        // Move task back out of 'doing' once focus completes
+        const task = TaskRepo.get(this._taskId)
+        if (task && task.status === 'doing') {
+          TaskRepo.update({ ...task, status: 'pending' })
+        }
+      }
       this._completedFocusCount++
     }
 
@@ -167,6 +195,8 @@ export class PomodoroTimer extends EventEmitter {
     this._remainingSec = 0
     this._totalSec = 0
     this._sessionId = null
+    this._taskId = null
+    this._blockId = null
     this._kind = PomodoroTimer.KIND_FOCUS
     this.emit('stateChanged', this._state)
   }

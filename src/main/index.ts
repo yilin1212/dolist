@@ -46,6 +46,15 @@ function createWindow(): void {
   ipcMain.on('window:close', () => {
     mainWindow?.hide()
   })
+  ipcMain.on('window:show', () => {
+    if (mainWindow) {
+      if (!mainWindow.isVisible()) mainWindow.show()
+      mainWindow.focus()
+    }
+  })
+  ipcMain.on('window:hide', () => {
+    mainWindow?.hide()
+  })
 
   if (isDev && process.env['ELECTRON_RENDERER_URL']) {
     mainWindow.loadURL(process.env['ELECTRON_RENDERER_URL'])

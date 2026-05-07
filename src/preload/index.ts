@@ -5,6 +5,8 @@ const electronAPI = {
     minimize: () => ipcRenderer.send('window:minimize'),
     maximize: () => ipcRenderer.send('window:maximize'),
     close: () => ipcRenderer.send('window:close'),
+    show: () => ipcRenderer.send('window:show'),
+    hide: () => ipcRenderer.send('window:hide'),
   },
   tasks: {
     list: (filters?: any) => ipcRenderer.invoke('task:list', filters),
@@ -29,6 +31,7 @@ const electronAPI = {
   schedule: {
     listBetween: (start: string, end: string) => ipcRenderer.invoke('schedule:listBetween', start, end),
     listToday: () => ipcRenderer.invoke('schedule:listToday'),
+    listByTask: (taskId: string) => ipcRenderer.invoke('schedule:listByTask', taskId),
     create: (block: any) => ipcRenderer.invoke('schedule:create', block),
     update: (block: any) => ipcRenderer.invoke('schedule:update', block),
     delete: (id: string) => ipcRenderer.invoke('schedule:delete', id),
@@ -59,6 +62,8 @@ const electronAPI = {
     },
     showMini: () => ipcRenderer.invoke('pomodoro:showMini'),
     hideMini: () => ipcRenderer.invoke('pomodoro:hideMini'),
+    setMiniBounds: (width: number, height: number) => ipcRenderer.invoke('pomodoro:setMiniBounds', width, height),
+    listBetween: (start: string, end: string) => ipcRenderer.invoke('pomodoro:listBetween', start, end),
   },
   settings: {
     get: (key: string) => ipcRenderer.invoke('settings:get', key),

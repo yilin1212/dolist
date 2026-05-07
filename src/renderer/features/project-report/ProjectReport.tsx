@@ -3,14 +3,10 @@ import { CheckCircle, Timer, Coffee, BarChart3 } from 'lucide-react'
 import { PageHeader } from '../../components/ui/page-header'
 import { SegmentedControl } from '../../components/ui/segmented-control'
 import { Card, CardContent } from '../../components/ui/card'
-
-const ranges = [
-  { value: 'today', label: '今天' },
-  { value: 'week', label: '7天' },
-  { value: 'month', label: '30天' },
-]
+import { useTranslation } from '../../i18n'
 
 export default function ProjectReport() {
+  const { t } = useTranslation()
   const [range, setRange] = useState('today')
   const [stats, setStats] = useState({
     completedTasks: 0,
@@ -18,6 +14,12 @@ export default function ProjectReport() {
     completedPomodoros: 0,
     avgMinutesPerPomodoro: 0,
   })
+
+  const ranges = [
+    { value: 'today', label: t('report.today') },
+    { value: 'week', label: t('report.week') },
+    { value: 'month', label: t('report.month') },
+  ]
 
   useEffect(() => {
     const load = async () => {
@@ -38,14 +40,17 @@ export default function ProjectReport() {
           return new Date(t.completed_at) >= start
         })
 
-        const pomodoros = await window.electronAPI.pomodoro.getState()
-        // Simplified stats - in production you'd query pomodoro_sessions table
+        // Query pomodoro_sessions table for historical data
+        const sessions = await window.electronAPI.pomodoro.listBetween(start.toISOString(), now.toISOString())
+        const completedSessions = sessions.filter((s: any) => s.status === 'completed' && s.session_kind === 'focus')
+        const totalFocusMinutes = completedSessions.reduce((sum: number, s: any) => sum + (s.actual_duration_minutes || 0), 0)
+
         setStats({
           completedTasks: completedInRange.length,
-          focusMinutes: completedInRange.reduce((sum: number, t: any) => sum + (t.actual_minutes || 0), 0),
-          completedPomodoros: pomodoros.completedFocusCount || 0,
-          avgMinutesPerPomodoro: pomodoros.completedFocusCount > 0
-            ? Math.round(completedInRange.reduce((sum: number, t: any) => sum + (t.actual_minutes || 0), 0) / pomodoros.completedFocusCount)
+          focusMinutes: totalFocusMinutes,
+          completedPomodoros: completedSessions.length,
+          avgMinutesPerPomodoro: completedSessions.length > 0
+            ? Math.round(totalFocusMinutes / completedSessions.length)
             : 0,
         })
       } catch (e) {
@@ -56,16 +61,16 @@ export default function ProjectReport() {
   }, [range])
 
   const statCards = [
-    { label: '完成任务', value: stats.completedTasks, icon: CheckCircle, color: 'text-success-500' },
-    { label: '专注分钟', value: stats.focusMinutes, icon: Timer, color: 'text-primary-500' },
-    { label: '完成番茄', value: stats.completedPomodoros, icon: Coffee, color: 'text-warning-500' },
-    { label: '平均分钟/番茄', value: stats.avgMinutesPerPomodoro, icon: BarChart3, color: 'text-neutral-600' },
+    { label: t('report.completedTasks'), value: stats.completedTasks, icon: CheckCircle, color: 'text-success-500' },
+    { label: t('report.focusMinutes'), value: stats.focusMinutes, icon: Timer, color: 'text-primary-500' },
+    { label: t('report.completedPomodoros'), value: stats.completedPomodoros, icon: Coffee, color: 'text-warning-500' },
+    { label: t('report.avgMinutes'), value: stats.avgMinutesPerPomodoro, icon: BarChart3, color: 'text-neutral-600' },
   ]
 
   return (
     <div className="flex h-full flex-col p-6">
       <div className="flex items-start justify-between mb-6">
-        <PageHeader title="统计报告" subtitle="查看你的工作效率" className="mb-0" />
+        <PageHeader title={t('report.title')} subtitle={t('report.subtitle')} className="mb-0" />
         <SegmentedControl options={ranges} value={range} onChange={setRange} />
       </div>
 
@@ -89,7 +94,7 @@ export default function ProjectReport() {
 
       {/* Placeholder for charts */}
       <div className="flex-1 rounded-xl border border-neutral-200 bg-white p-6">
-        <p className="text-center text-sm text-neutral-500">图表功能开发中...</p>
+        <p className="text-center text-sm text-neutral-500">{t('report.chartsPlaceholder')}</p>
       </div>
     </div>
   )

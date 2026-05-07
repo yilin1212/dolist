@@ -1,8 +1,10 @@
 import { useSortable } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
-import { Pencil } from 'lucide-react'
+import { Pencil, Timer } from 'lucide-react'
 import type { Task } from '../../../../../types/models'
 import { cn } from '../../../lib/utils'
+import { useTranslation } from '../../../i18n'
+import { usePomodoroStore } from '../../pomodoro/store'
 
 const PRIORITY_COLORS: Record<number, string> = {
   1: 'bg-neutral-500', 2: 'bg-primary-500', 3: 'bg-warning-500', 4: 'bg-destructive-500',
@@ -11,25 +13,35 @@ const PRIORITY_COLORS: Record<number, string> = {
 interface KanbanCardProps {
   task: Task
   onEdit: () => void
+  dragOverlay?: boolean
 }
 
-export default function KanbanCard({ task, onEdit }: KanbanCardProps) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: task.id })
+export default function KanbanCard({ task, onEdit, dragOverlay }: KanbanCardProps) {
+  const { locale, t } = useTranslation()
+  const startFocus = usePomodoroStore((s) => s.startFocus)
+  const sortable = useSortable({ id: task.id, disabled: dragOverlay })
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = sortable
 
-  const style = {
-    transform: CSS.Transform.toString(transform),
-    transition,
-  }
+  const style = dragOverlay
+    ? undefined
+    : {
+        transform: CSS.Transform.toString(transform),
+        transition,
+      }
+
+  // Prevent button clicks from initiating a drag
+  const stop = (e: React.PointerEvent | React.MouseEvent) => e.stopPropagation()
 
   return (
     <div
-      ref={setNodeRef}
+      ref={dragOverlay ? undefined : setNodeRef}
       style={style}
-      {...attributes}
-      {...listeners}
+      {...(dragOverlay ? {} : attributes)}
+      {...(dragOverlay ? {} : listeners)}
       className={cn(
         'group cursor-grab rounded-lg border border-neutral-200 bg-white p-3 shadow-sm transition-shadow hover:shadow-md',
-        isDragging && 'opacity-50 shadow-lg'
+        isDragging && !dragOverlay && 'opacity-30',
+        dragOverlay && 'cursor-grabbing shadow-xl ring-2 ring-primary-300'
       )}
     >
       <div className="flex items-start gap-2">
@@ -47,16 +59,30 @@ export default function KanbanCard({ task, onEdit }: KanbanCardProps) {
           )}
           {task.due_date && (
             <p className="mt-1 text-xs text-neutral-500">
-              {new Date(task.due_date).toLocaleDateString('zh-CN', { month: 'short', day: 'numeric' })}
+              {new Date(task.due_date).toLocaleDateString(locale, { month: 'short', day: 'numeric' })}
             </p>
           )}
         </div>
-        <button
-          onClick={(e) => { e.stopPropagation(); onEdit() }}
-          className="rounded p-1 text-neutral-400 opacity-0 transition-opacity hover:bg-neutral-100 hover:text-neutral-600 group-hover:opacity-100"
-        >
-          <Pencil size={12} />
-        </button>
+        {!dragOverlay && (
+          <div className="flex items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
+            <button
+              onPointerDown={stop}
+              onClick={(e) => { e.stopPropagation(); startFocus(task.estimated_minutes || 25, task.id) }}
+              className="rounded p-1 text-neutral-400 hover:bg-primary-50 hover:text-primary-600"
+              title={t('common.startPomodoro')}
+            >
+              <Timer size={12} />
+            </button>
+            <button
+              onPointerDown={stop}
+              onClick={(e) => { e.stopPropagation(); onEdit() }}
+              className="rounded p-1 text-neutral-400 hover:bg-neutral-100 hover:text-neutral-600"
+              title={t('common.edit')}
+            >
+              <Pencil size={12} />
+            </button>
+          </div>
+        )}
       </div>
     </div>
   )

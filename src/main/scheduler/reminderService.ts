@@ -53,7 +53,7 @@ export function startReminderService(timer: PomodoroTimer): void {
     }
   }, CHECK_INTERVAL)
 
-  // Pomodoro session finish notifications
+  // Pomodoro session finish notifications (only for completed, not cancelled)
   timer.on('sessionFinished', (data: { id: string; kind: string }) => {
     if (!Notification.isSupported()) return
 

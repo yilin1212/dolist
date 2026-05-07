@@ -131,6 +131,11 @@ export const TaskRepo = {
   },
 
   delete(id: string): void {
+    // Defensive: explicitly remove related rows in case sql.js does not enforce
+    // ON DELETE CASCADE consistently across the in-memory DB.
+    getDb().run('DELETE FROM task_tags WHERE task_id = ?', [id])
+    getDb().run('DELETE FROM schedule_blocks WHERE task_id = ?', [id])
+    getDb().run('UPDATE pomodoro_sessions SET task_id = NULL WHERE task_id = ?', [id])
     getDb().run('DELETE FROM tasks WHERE id = ?', [id])
     markDirty()
   },

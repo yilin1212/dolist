@@ -3,7 +3,6 @@ import {
   Inbox,
   Sun,
   CalendarDays,
-  LayoutGrid,
   Columns3,
   GanttChart,
   Grid2x2,
@@ -14,24 +13,27 @@ import {
   ChevronRight,
 } from 'lucide-react'
 import { cn } from '../../lib/utils'
-
-const navItems = [
-  { path: '/inbox', label: '收件箱', icon: Inbox },
-  { path: '/today', label: '今天', icon: Sun },
-  { path: '/upcoming', label: '即将', icon: CalendarDays },
-  { divider: true },
-  { path: '/calendar', label: '日历', icon: CalendarDays },
-  { path: '/kanban', label: '看板', icon: Columns3 },
-  { path: '/timeline', label: '时间线', icon: GanttChart },
-  { path: '/matrix', label: '四象限', icon: Grid2x2 },
-  { path: '/report', label: '报告', icon: BarChart3 },
-  { divider: true },
-  { path: '/pomodoro', label: '番茄钟', icon: Timer },
-  { path: '/tags', label: '标签', icon: Tag },
-  { path: '/settings', label: '设置', icon: Settings },
-]
+import { useTranslation } from '../../i18n'
 
 export default function Sidebar() {
+  const { t } = useTranslation()
+
+  const navItems = [
+    { path: '/inbox', label: t('nav.inbox'), icon: Inbox },
+    { path: '/today', label: t('nav.today'), icon: Sun },
+    { path: '/upcoming', label: t('nav.upcoming'), icon: CalendarDays },
+    { divider: true },
+    { path: '/calendar', label: t('nav.calendar'), icon: CalendarDays },
+    { path: '/kanban', label: t('nav.kanban'), icon: Columns3 },
+    { path: '/timeline', label: t('nav.timeline'), icon: GanttChart },
+    { path: '/matrix', label: t('nav.matrix'), icon: Grid2x2 },
+    { path: '/report', label: t('nav.report'), icon: BarChart3 },
+    { divider: true },
+    { path: '/pomodoro', label: t('nav.pomodoro'), icon: Timer },
+    { path: '/tags', label: t('nav.tags'), icon: Tag },
+    { path: '/settings', label: t('nav.settings'), icon: Settings },
+  ]
+
   return (
     <nav className="flex h-full flex-col overflow-y-auto px-2 py-3">
       {/* App title */}
@@ -71,7 +73,7 @@ export default function Sidebar() {
       <div className="mt-auto border-t border-neutral-150 pt-3">
         <div className="flex items-center justify-between px-3">
           <span className="text-[11px] font-semibold uppercase tracking-wider text-neutral-500">
-            项目
+            {t('nav.projects')}
           </span>
           <button className="rounded p-0.5 text-neutral-500 hover:bg-neutral-150 hover:text-neutral-900">
             <ChevronRight size={14} />

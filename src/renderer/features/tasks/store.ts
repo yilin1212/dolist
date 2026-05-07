@@ -6,7 +6,6 @@ interface TaskFilters {
   category_id?: string
   include_done: boolean
   search: string
-  list?: string
 }
 
 interface TaskStore {
@@ -23,6 +22,14 @@ interface TaskStore {
   markPending: (id: string) => Promise<void>
   setFilters: (filters: Partial<TaskFilters>) => void
   setSelectedTask: (id: string | null) => void
+}
+
+let searchDebounce: ReturnType<typeof setTimeout> | null = null
+
+function notifyTasksChanged(): void {
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('tasks:changed'))
+  }
 }
 
 export const useTaskStore = create<TaskStore>((set, get) => ({
@@ -49,32 +56,41 @@ export const useTaskStore = create<TaskStore>((set, get) => ({
   createTask: async (task) => {
     const id = await window.electronAPI.tasks.create(task)
     await get().fetchTasks()
+    notifyTasksChanged()
     return id
   },
 
   updateTask: async (task) => {
     await window.electronAPI.tasks.update(task)
     await get().fetchTasks()
+    notifyTasksChanged()
   },
 
   deleteTask: async (id) => {
     await window.electronAPI.tasks.delete(id)
     await get().fetchTasks()
+    // schedule_blocks are cascade-deleted at the DB layer; notify schedule views
+    notifyTasksChanged()
   },
 
   markDone: async (id) => {
     await window.electronAPI.tasks.markDone(id)
     await get().fetchTasks()
+    notifyTasksChanged()
   },
 
   markPending: async (id) => {
     await window.electronAPI.tasks.markPending(id)
     await get().fetchTasks()
+    notifyTasksChanged()
   },
 
   setFilters: (filters) => {
     set((state) => ({ filters: { ...state.filters, ...filters } }))
-    get().fetchTasks()
+    if (searchDebounce) clearTimeout(searchDebounce)
+    searchDebounce = setTimeout(() => {
+      get().fetchTasks()
+    }, 150)
   },
 
   setSelectedTask: (id) => set({ selectedTaskId: id }),

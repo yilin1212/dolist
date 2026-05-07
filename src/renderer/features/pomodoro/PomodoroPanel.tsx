@@ -1,31 +1,64 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Play, Pause, Square, Minus, Plus, Minimize2 } from 'lucide-react'
 import { usePomodoroStore } from './store'
+import { useTaskStore } from '../tasks/store'
 import { ProgressRing } from '../../components/ui/progress-ring'
 import { Button } from '../../components/ui/button'
+import { useTranslation } from '../../i18n'
 
 export default function PomodoroPanel() {
-  const { state, remainingSec, totalSec, kind, completedFocusCount, fetchState, startFocus, pause, resume, stop, subscribe } = usePomodoroStore()
+  const { t } = useTranslation()
+  const { state, remainingSec, totalSec, kind, taskId, completedFocusCount, fetchState, startFocus, pause, resume, stop, subscribe } = usePomodoroStore()
+  const { tasks, fetchTasks } = useTaskStore()
   const [focusMinutes, setFocusMinutes] = useState(25)
+  const [selectedTaskId, setSelectedTaskId] = useState<string>('')
   const isActive = state !== 'idle'
 
   useEffect(() => {
     fetchState()
+    fetchTasks()
     const unsub = subscribe()
+    window.electronAPI.settings.getInt('pomodoro_focus_min', 25).then((min) => {
+      if (min > 0) setFocusMinutes(min)
+    }).catch(() => {})
     return unsub
   }, [])
+
+  // Tasks available for selection: pending or doing, never done/cancelled
+  const eligibleTasks = useMemo(
+    () => tasks.filter((t) => t.status !== 'done' && t.status !== 'cancelled'),
+    [tasks]
+  )
+
+  const activeTaskTitle = useMemo(() => {
+    if (!taskId) return null
+    return tasks.find((t) => t.id === taskId)?.title || null
+  }, [taskId, tasks])
 
   const progress = totalSec > 0 ? 1 - remainingSec / totalSec : 0
   const minutes = Math.floor(remainingSec / 60)
   const seconds = remainingSec % 60
 
   const formatTime = () => `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`
+  const kindLabel = kind === 'focus' ? t('pomodoro.focus') : kind === 'short_break' ? t('pomodoro.shortBreak') : t('pomodoro.longBreak')
 
-  const kindLabel = kind === 'focus' ? '专注' : kind === 'short_break' ? '短休息' : '长休息'
+  const handleStart = () => {
+    startFocus(focusMinutes, selectedTaskId || undefined)
+  }
 
   return (
     <div className="flex h-full flex-col items-center justify-center p-6">
-      <h1 className="mb-8 text-2xl font-bold tracking-tight text-neutral-900">番茄钟</h1>
+      <div className="mb-8 flex w-full items-start justify-between">
+        <h1 className="text-2xl font-bold tracking-tight text-neutral-900">{t('pomodoro.title')}</h1>
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={() => window.electronAPI.pomodoro.showMini()}
+          title={t('pomodoro.mini')}
+        >
+          <Minimize2 className="h-4 w-4" />
+        </Button>
+      </div>
 
       {/* Timer ring */}
       <div className="relative mb-6">
@@ -41,6 +74,32 @@ export default function PomodoroPanel() {
         </div>
       </div>
 
+      {/* Active task indicator */}
+      {isActive && activeTaskTitle && (
+        <div className="mb-4 max-w-xs truncate rounded-lg bg-primary-50 px-3 py-1.5 text-sm text-primary-700">
+          {activeTaskTitle}
+        </div>
+      )}
+
+      {/* Task selector (idle only) */}
+      {!isActive && (
+        <div className="mb-4 w-full max-w-sm">
+          <label className="mb-1.5 block text-xs font-medium text-neutral-600">
+            {t('pomodoro.selectTask')}
+          </label>
+          <select
+            value={selectedTaskId}
+            onChange={(e) => setSelectedTaskId(e.target.value)}
+            className="w-full rounded-md border border-neutral-200 bg-white px-3 py-2 text-sm focus:border-primary-500 focus:outline-none"
+          >
+            <option value="">{t('pomodoro.noTask')}</option>
+            {eligibleTasks.map((task) => (
+              <option key={task.id} value={task.id}>{task.title}</option>
+            ))}
+          </select>
+        </div>
+      )}
+
       {/* Controls */}
       <div className="flex items-center gap-3 mb-6">
         {!isActive ? (
@@ -52,7 +111,7 @@ export default function PomodoroPanel() {
               >
                 <Minus size={14} />
               </button>
-              <span className="w-12 text-center text-sm font-medium">{focusMinutes}分</span>
+              <span className="w-12 text-center text-sm font-medium">{focusMinutes}{t('pomodoro.minutes')}</span>
               <button
                 onClick={() => setFocusMinutes(Math.min(120, focusMinutes + 5))}
                 className="rounded p-1 text-neutral-500 hover:bg-neutral-150"
@@ -60,9 +119,9 @@ export default function PomodoroPanel() {
                 <Plus size={14} />
               </button>
             </div>
-            <Button onClick={() => startFocus(focusMinutes)}>
+            <Button onClick={handleStart}>
               <Play className="mr-1.5 h-4 w-4" />
-              开始专注
+              {t('pomodoro.startFocus')}
             </Button>
           </>
         ) : (
@@ -70,25 +129,17 @@ export default function PomodoroPanel() {
             {state === 'focusing' || state === 'break' ? (
               <Button variant="outline" onClick={pause}>
                 <Pause className="mr-1.5 h-4 w-4" />
-                暂停
+                {t('pomodoro.pause')}
               </Button>
             ) : (
               <Button onClick={resume}>
                 <Play className="mr-1.5 h-4 w-4" />
-                继续
+                {t('pomodoro.resume')}
               </Button>
             )}
             <Button variant="destructive" onClick={stop}>
               <Square className="mr-1.5 h-4 w-4" />
-              停止
-            </Button>
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={() => window.electronAPI.pomodoro.showMini()}
-              title="缩小为迷你窗口"
-            >
-              <Minimize2 className="h-4 w-4" />
+              {t('pomodoro.stop')}
             </Button>
           </>
         )}
@@ -96,9 +147,9 @@ export default function PomodoroPanel() {
 
       {/* Today summary */}
       <div className="rounded-lg border border-neutral-200 bg-white p-4 text-center">
-        <p className="text-sm text-neutral-600">今日完成</p>
+        <p className="text-sm text-neutral-600">{t('pomodoro.completed')}</p>
         <p className="mt-1 text-2xl font-bold text-neutral-900">{completedFocusCount}</p>
-        <p className="text-xs text-neutral-500">个番茄钟</p>
+        <p className="text-xs text-neutral-500">{t('pomodoro.pomodoros')}</p>
       </div>
     </div>
   )

@@ -4,6 +4,7 @@ dist/
 release/
 .vite/
 .stage/
+DoList-*.zip
 *.db
 *.db-journal
 .DS_Store

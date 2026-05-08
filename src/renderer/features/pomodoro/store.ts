@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { useTaskStore } from '../tasks/store'
+import { notifyTasksChanged } from '../../lib/utils'
 
 interface PomodoroState {
   state: string
@@ -18,14 +19,15 @@ interface PomodoroState {
   subscribe: () => () => void
 }
 
-function notifyTasksChanged(): void {
+function notifyPomodoroTasksChanged(): void {
   // Pull a fresh task list (main process may have moved status to/from 'doing'),
   // and let any other store that cares (e.g. ScheduleStore) react too.
   useTaskStore.getState().fetchTasks()
-  if (typeof window !== 'undefined') {
-    window.dispatchEvent(new CustomEvent('tasks:changed'))
-  }
+  notifyTasksChanged()
 }
+
+let subscriptionCount = 0
+let unsubscribers: Array<() => void> = []
 
 export const usePomodoroStore = create<PomodoroState>((set, get) => ({
   state: 'idle',
@@ -52,48 +54,86 @@ export const usePomodoroStore = create<PomodoroState>((set, get) => ({
   },
 
   startFocus: async (minutes, taskId, blockId) => {
-    await window.electronAPI.pomodoro.startFocus(minutes, taskId, blockId)
-    await get().fetchState()
-    // The main process may have moved the task to 'doing' — refresh views
-    notifyTasksChanged()
+    try {
+      await window.electronAPI.pomodoro.startFocus(minutes, taskId, blockId)
+      await get().fetchState()
+      // The main process may have moved the task to 'doing' — refresh views
+      notifyPomodoroTasksChanged()
+    } catch (e) {
+      console.error('Failed to start focus:', e)
+      throw e
+    }
   },
 
   startBreak: async (kind = 'short_break') => {
-    await window.electronAPI.pomodoro.startBreak(kind)
-    await get().fetchState()
+    try {
+      await window.electronAPI.pomodoro.startBreak(kind)
+      await get().fetchState()
+    } catch (e) {
+      console.error('Failed to start break:', e)
+      throw e
+    }
   },
 
   pause: async () => {
-    await window.electronAPI.pomodoro.pause()
+    try {
+      await window.electronAPI.pomodoro.pause()
+      await get().fetchState()
+    } catch (e) {
+      console.error('Failed to pause pomodoro:', e)
+    }
   },
 
   resume: async () => {
-    await window.electronAPI.pomodoro.resume()
+    try {
+      await window.electronAPI.pomodoro.resume()
+      await get().fetchState()
+    } catch (e) {
+      console.error('Failed to resume pomodoro:', e)
+    }
   },
 
   stop: async () => {
-    await window.electronAPI.pomodoro.stop()
-    await get().fetchState()
-    notifyTasksChanged()
+    try {
+      await window.electronAPI.pomodoro.stop()
+      await get().fetchState()
+      notifyPomodoroTasksChanged()
+    } catch (e) {
+      console.error('Failed to stop pomodoro:', e)
+      throw e
+    }
   },
 
   subscribe: () => {
-    const unsubTick = window.electronAPI.pomodoro.onTick((data) => {
-      set({ remainingSec: data.remaining, totalSec: data.total })
-    })
-    const unsubState = window.electronAPI.pomodoro.onStateChanged((state) => {
-      const prev = get().state
-      set({ state })
-      get().fetchState()
-      // When state transitions involve idle (start or end), task status may
-      // have been changed by the main process — refresh views.
-      if (prev !== state && (prev === 'idle' || state === 'idle')) {
-        notifyTasksChanged()
+    subscriptionCount++
+    if (subscriptionCount === 1) {
+      try {
+        const unsubTick = window.electronAPI.pomodoro.onTick((data) => {
+          set({ remainingSec: data.remaining, totalSec: data.total })
+        })
+        const unsubState = window.electronAPI.pomodoro.onStateChanged((state) => {
+          const prev = get().state
+          set({ state })
+          get().fetchState()
+          if (prev !== state && (prev === 'idle' || state === 'idle')) {
+            notifyPomodoroTasksChanged()
+          }
+        })
+        const unsubFinished = window.electronAPI.pomodoro.onSessionFinished(() => {
+          notifyPomodoroTasksChanged()
+        })
+        unsubscribers = [unsubTick, unsubState, unsubFinished]
+      } catch (e) {
+        console.error('Failed to subscribe to pomodoro events:', e)
       }
-    })
-    const unsubFinished = window.electronAPI.pomodoro.onSessionFinished(() => {
-      notifyTasksChanged()
-    })
-    return () => { unsubTick(); unsubState(); unsubFinished() }
+    }
+    return () => {
+      subscriptionCount--
+      if (subscriptionCount <= 0) {
+        subscriptionCount = 0
+        unsubscribers.forEach((fn) => fn())
+        unsubscribers = []
+      }
+    }
   },
 }))

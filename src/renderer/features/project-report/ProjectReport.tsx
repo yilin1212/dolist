@@ -1,13 +1,17 @@
 import { useEffect, useState } from 'react'
+import { parseISO } from 'date-fns'
 import { CheckCircle, Timer, Coffee, BarChart3 } from 'lucide-react'
 import { PageHeader } from '../../components/ui/page-header'
 import { SegmentedControl } from '../../components/ui/segmented-control'
 import { Card, CardContent } from '../../components/ui/card'
 import { useTranslation } from '../../i18n'
+import type { Task } from '../../../../types/models'
+import type { PomodoroSession } from '../../../../types/models'
 
 export default function ProjectReport() {
   const { t } = useTranslation()
   const [range, setRange] = useState('today')
+  const [loading, setLoading] = useState(true)
   const [stats, setStats] = useState({
     completedTasks: 0,
     focusMinutes: 0,
@@ -23,6 +27,7 @@ export default function ProjectReport() {
 
   useEffect(() => {
     const load = async () => {
+      setLoading(true)
       try {
         const now = new Date()
         let start: Date
@@ -34,16 +39,16 @@ export default function ProjectReport() {
           start = new Date(now.getTime() - 30 * 86400000)
         }
 
-        const tasks = await window.electronAPI.tasks.list({ status: 'done' })
-        const completedInRange = tasks.filter((t: any) => {
-          if (!t.completed_at) return false
-          return new Date(t.completed_at) >= start
+        const tasks: Task[] = await window.electronAPI.tasks.list({ status: 'done' })
+        const completedInRange = tasks.filter((task) => {
+          if (!task.completed_at) return false
+          return parseISO(task.completed_at) >= start
         })
 
         // Query pomodoro_sessions table for historical data
-        const sessions = await window.electronAPI.pomodoro.listBetween(start.toISOString(), now.toISOString())
-        const completedSessions = sessions.filter((s: any) => s.status === 'completed' && s.session_kind === 'focus')
-        const totalFocusMinutes = completedSessions.reduce((sum: number, s: any) => sum + (s.actual_duration_minutes || 0), 0)
+        const sessions: PomodoroSession[] = await window.electronAPI.pomodoro.listBetween(start.toISOString(), now.toISOString())
+        const completedSessions = sessions.filter((s) => s.status === 'completed' && s.session_kind === 'focus')
+        const totalFocusMinutes = completedSessions.reduce((sum, s) => sum + (s.actual_duration_minutes || 0), 0)
 
         setStats({
           completedTasks: completedInRange.length,
@@ -55,6 +60,8 @@ export default function ProjectReport() {
         })
       } catch (e) {
         console.error('Failed to load stats:', e)
+      } finally {
+        setLoading(false)
       }
     }
     load()
@@ -76,7 +83,9 @@ export default function ProjectReport() {
 
       {/* Stat cards */}
       <div className="mb-6 grid grid-cols-4 gap-3">
-        {statCards.map((stat) => {
+        {loading ? (
+          <div className="col-span-4 py-20 text-center text-neutral-500">{t('common.loading')}</div>
+        ) : statCards.map((stat) => {
           const Icon = stat.icon
           return (
             <Card key={stat.label}>

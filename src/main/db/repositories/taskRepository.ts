@@ -2,7 +2,9 @@ import { getDb, markDirty } from '../client'
 import { v4 as uuidv4 } from 'uuid'
 import type { Task } from '../../../../types/models'
 
-function rowToTask(row: any[], tags: string[] = []): Task {
+type SqlValue = string | number | null | Uint8Array
+
+function rowToTask(row: SqlValue[], tags: string[] = []): Task {
   return {
     id: row[0] as string,
     title: row[1] as string,
@@ -55,7 +57,7 @@ function saveTags(taskId: string, tags: string[]): void {
 export const TaskRepo = {
   listAll(filters?: { status?: string; category_id?: string; include_done?: boolean; search?: string; list?: string }): Task[] {
     let sql = 'SELECT * FROM tasks WHERE 1=1'
-    const params: any[] = []
+    const params: SqlValue[] = []
 
     if (filters?.status) {
       sql += ' AND status = ?'
@@ -79,9 +81,22 @@ export const TaskRepo = {
 
     sql += ' ORDER BY priority DESC, created_at DESC'
 
-    const result = getDb().exec(sql, params)
+    // Use a single query with JOIN to load tags instead of N+1 queries
+    const tagJoinSql = `
+      SELECT t.*, GROUP_CONCAT(tg.name) as tag_names
+      FROM (${sql}) t
+      LEFT JOIN task_tags tt ON tt.task_id = t.id
+      LEFT JOIN tags tg ON tg.id = tt.tag_id
+      GROUP BY t.id
+    `
+    const result = getDb().exec(tagJoinSql, params)
     if (result.length === 0) return []
-    return result[0].values.map((row) => rowToTask(row, loadTags(row[0] as string)))
+    return result[0].values.map((row) => {
+      const tagsStr = row[row.length - 1] as string | null
+      const tags = tagsStr ? tagsStr.split(',').filter(Boolean) : []
+      // Remove the extra tag_names column before passing to rowToTask
+      return rowToTask(row.slice(0, -1), tags)
+    })
   },
 
   get(id: string): Task | null {

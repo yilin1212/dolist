@@ -16,8 +16,12 @@ export default function TagManager() {
   const handleAdd = async () => {
     const name = newTagName.trim()
     if (!name) return
-    await createTag(name)
-    setNewTagName('')
+    try {
+      await createTag(name)
+      setNewTagName('')
+    } catch (e) {
+      console.error('Failed to create tag:', e)
+    }
   }
 
   return (
@@ -46,8 +50,10 @@ export default function TagManager() {
               <div key={tag.id} className="flex items-center justify-between rounded-lg border border-neutral-200 bg-white px-4 py-2.5">
                 <span className="text-sm text-neutral-900">{tag.name}</span>
                 <button
-                  onClick={() => deleteTag(tag.id)}
+                  onClick={() => deleteTag(tag.id).catch(() => {})}
                   className="rounded p-1 text-neutral-400 hover:bg-destructive-50 hover:text-destructive-500"
+                  aria-label={t('common.delete')}
+                  title={t('common.delete')}
                 >
                   <Trash2 size={14} />
                 </button>

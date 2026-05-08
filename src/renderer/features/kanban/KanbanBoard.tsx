@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useHotkeys } from 'react-hotkeys-hook'
 import {
   DndContext,
   DragOverlay,
@@ -32,18 +33,24 @@ const collision: CollisionDetection = (args) => {
 
 export default function KanbanBoard() {
   const { t } = useTranslation()
-  const { tasks, fetchTasks, updateTask } = useTaskStore()
+  const { tasks, loading, fetchTasks, updateTask } = useTaskStore()
   const [showForm, setShowForm] = useState(false)
   const [editingTask, setEditingTask] = useState<Task | null>(null)
   const [activeId, setActiveId] = useState<string | null>(null)
 
-  const columns: Array<{ id: ColumnStatus; title: string; status: ColumnStatus }> = [
+  const columns = useMemo<Array<{ id: ColumnStatus; title: string; status: ColumnStatus }>>(() => [
     { id: 'pending', title: t('kanban.columns.pending'), status: 'pending' },
     { id: 'doing', title: t('kanban.columns.doing'), status: 'doing' },
     { id: 'done', title: t('kanban.columns.done'), status: 'done' },
-  ]
+  ], [t])
 
   useEffect(() => { fetchTasks() }, [])
+
+  useHotkeys('ctrl+n, meta+n', (e) => {
+    e.preventDefault()
+    setEditingTask(null)
+    setShowForm(true)
+  })
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }))
 
@@ -67,11 +74,23 @@ export default function KanbanBoard() {
 
   const activeTask = activeId ? tasks.find((t) => t.id === activeId) || null : null
 
-  const handleDragStart = (event: DragStartEvent) => {
-    setActiveId(event.active.id as string)
-  }
+  const handleEditTask = useCallback((task: Task) => {
+    setEditingTask(task)
+    setShowForm(true)
+  }, [])
 
-  const handleDragEnd = (event: DragEndEvent) => {
+  const handleCloseForm = useCallback(() => {
+    setShowForm(false)
+    setEditingTask(null)
+  }, [])
+
+  const handleDragStart = useCallback((event: DragStartEvent) => {
+    setActiveId(event.active.id as string)
+  }, [])
+
+  const handleDragCancel = useCallback(() => setActiveId(null), [])
+
+  const handleDragEnd = async (event: DragEndEvent) => {
     setActiveId(null)
     const { active, over } = event
     if (!over) return
@@ -114,21 +133,31 @@ export default function KanbanBoard() {
 
     // Persist new sort_order for every task in the target column. Use widely
     // spaced integers to avoid collisions and keep diffs small.
-    colTasks.forEach((task, idx) => {
+    const updates: Promise<void>[] = []
+    for (let idx = 0; idx < colTasks.length; idx++) {
+      const task = colTasks[idx]
       const newOrder = (idx + 1) * 1000
       const needsStatusUpdate = task.id === taskId && statusChanged
       const orderUnchanged = task.sort_order === newOrder
-      if (orderUnchanged && !needsStatusUpdate) return
-      updateTask({
-        ...task,
-        status: needsStatusUpdate ? targetCol! : task.status,
-        sort_order: newOrder,
-        // Mark completed_at when entering 'done' for the dragged task
-        completed_at: needsStatusUpdate && targetCol === 'done'
-          ? new Date(now).toISOString()
-          : (task.id === taskId && targetCol !== 'done' ? null : task.completed_at),
-      })
-    })
+      if (orderUnchanged && !needsStatusUpdate) continue
+      updates.push(
+        updateTask({
+          ...task,
+          status: needsStatusUpdate ? targetCol! : task.status,
+          sort_order: newOrder,
+          completed_at: needsStatusUpdate && targetCol === 'done'
+            ? new Date(now).toISOString()
+            : (task.id === taskId && targetCol !== 'done' ? null : task.completed_at),
+        })
+      )
+    }
+    if (updates.length > 0) {
+      try {
+        await Promise.all(updates)
+      } catch (e) {
+        console.error('Failed to persist drag reorder:', e)
+      }
+    }
   }
 
   return (
@@ -142,10 +171,12 @@ export default function KanbanBoard() {
         collisionDetection={collision}
         onDragStart={handleDragStart}
         onDragEnd={handleDragEnd}
-        onDragCancel={() => setActiveId(null)}
+        onDragCancel={handleDragCancel}
       >
         <div className="flex flex-1 gap-4 overflow-x-auto">
-          {columns.map((col) => {
+          {loading ? (
+            <div className="flex flex-1 items-center justify-center text-neutral-500">{t('common.loading')}</div>
+          ) : columns.map((col) => {
             const colTasks = tasksByColumn[col.status]
             return (
               <KanbanColumn
@@ -154,7 +185,7 @@ export default function KanbanBoard() {
                 title={col.title}
                 tasks={colTasks}
                 count={colTasks.length}
-                onEditTask={(t) => { setEditingTask(t); setShowForm(true) }}
+                onEditTask={handleEditTask}
               />
             )
           })}
@@ -167,7 +198,7 @@ export default function KanbanBoard() {
         </DragOverlay>
       </DndContext>
 
-      <TaskForm open={showForm} task={editingTask} onClose={() => { setShowForm(false); setEditingTask(null) }} />
+      <TaskForm open={showForm} task={editingTask} onClose={handleCloseForm} />
     </div>
   )
 }

@@ -4,6 +4,7 @@ import { usePomodoroStore } from './store'
 import { useTaskStore } from '../tasks/store'
 import { ProgressRing } from '../../components/ui/progress-ring'
 import { Button } from '../../components/ui/button'
+import { Select } from '../../components/ui/select'
 import { useTranslation } from '../../i18n'
 
 export default function PomodoroPanel() {
@@ -42,8 +43,12 @@ export default function PomodoroPanel() {
   const formatTime = () => `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`
   const kindLabel = kind === 'focus' ? t('pomodoro.focus') : kind === 'short_break' ? t('pomodoro.shortBreak') : t('pomodoro.longBreak')
 
-  const handleStart = () => {
-    startFocus(focusMinutes, selectedTaskId || undefined)
+  const handleStart = async () => {
+    try {
+      await startFocus(focusMinutes, selectedTaskId || undefined)
+    } catch (e) {
+      console.error('Failed to start focus:', e)
+    }
   }
 
   return (
@@ -53,7 +58,8 @@ export default function PomodoroPanel() {
         <Button
           variant="ghost"
           size="icon"
-          onClick={() => window.electronAPI.pomodoro.showMini()}
+          onClick={() => window.electronAPI.pomodoro.showMini().catch(() => {})}
+          aria-label={t('pomodoro.mini')}
           title={t('pomodoro.mini')}
         >
           <Minimize2 className="h-4 w-4" />
@@ -87,16 +93,15 @@ export default function PomodoroPanel() {
           <label className="mb-1.5 block text-xs font-medium text-neutral-600">
             {t('pomodoro.selectTask')}
           </label>
-          <select
+          <Select
             value={selectedTaskId}
             onChange={(e) => setSelectedTaskId(e.target.value)}
-            className="w-full rounded-md border border-neutral-200 bg-white px-3 py-2 text-sm focus:border-primary-500 focus:outline-none"
           >
             <option value="">{t('pomodoro.noTask')}</option>
             {eligibleTasks.map((task) => (
               <option key={task.id} value={task.id}>{task.title}</option>
             ))}
-          </select>
+          </Select>
         </div>
       )}
 
@@ -108,6 +113,7 @@ export default function PomodoroPanel() {
               <button
                 onClick={() => setFocusMinutes(Math.max(1, focusMinutes - 5))}
                 className="rounded p-1 text-neutral-500 hover:bg-neutral-150"
+                aria-label={t('pomodoro.decreaseMinutes')}
               >
                 <Minus size={14} />
               </button>
@@ -115,6 +121,7 @@ export default function PomodoroPanel() {
               <button
                 onClick={() => setFocusMinutes(Math.min(120, focusMinutes + 5))}
                 className="rounded p-1 text-neutral-500 hover:bg-neutral-150"
+                aria-label={t('pomodoro.increaseMinutes')}
               >
                 <Plus size={14} />
               </button>
@@ -127,17 +134,17 @@ export default function PomodoroPanel() {
         ) : (
           <>
             {state === 'focusing' || state === 'break' ? (
-              <Button variant="outline" onClick={pause}>
+              <Button variant="outline" onClick={() => pause()}>
                 <Pause className="mr-1.5 h-4 w-4" />
                 {t('pomodoro.pause')}
               </Button>
             ) : (
-              <Button onClick={resume}>
+              <Button onClick={() => resume()}>
                 <Play className="mr-1.5 h-4 w-4" />
                 {t('pomodoro.resume')}
               </Button>
             )}
-            <Button variant="destructive" onClick={stop}>
+            <Button variant="destructive" onClick={() => stop().catch(() => {})}>
               <Square className="mr-1.5 h-4 w-4" />
               {t('pomodoro.stop')}
             </Button>

@@ -1,4 +1,6 @@
-import { contextBridge, ipcRenderer } from 'electron'
+import { contextBridge, ipcRenderer, type IpcRendererEvent } from 'electron'
+import type { Task, Category, ScheduleBlock } from '../../types/models'
+import type { TaskFilter } from '../../types/ipc'
 
 const electronAPI = {
   window: {
@@ -9,10 +11,10 @@ const electronAPI = {
     hide: () => ipcRenderer.send('window:hide'),
   },
   tasks: {
-    list: (filters?: any) => ipcRenderer.invoke('task:list', filters),
+    list: (filters?: TaskFilter) => ipcRenderer.invoke('task:list', filters),
     get: (id: string) => ipcRenderer.invoke('task:get', id),
-    create: (task: any) => ipcRenderer.invoke('task:create', task),
-    update: (task: any) => ipcRenderer.invoke('task:update', task),
+    create: (task: Partial<Task>) => ipcRenderer.invoke('task:create', task),
+    update: (task: Task) => ipcRenderer.invoke('task:update', task),
     delete: (id: string) => ipcRenderer.invoke('task:delete', id),
     markDone: (id: string) => ipcRenderer.invoke('task:markDone', id),
     markPending: (id: string) => ipcRenderer.invoke('task:markPending', id),
@@ -20,7 +22,7 @@ const electronAPI = {
   categories: {
     list: () => ipcRenderer.invoke('category:list'),
     create: (name: string, color: string) => ipcRenderer.invoke('category:create', name, color),
-    update: (category: any) => ipcRenderer.invoke('category:update', category),
+    update: (category: Partial<Category>) => ipcRenderer.invoke('category:update', category),
     delete: (id: string) => ipcRenderer.invoke('category:delete', id),
   },
   tags: {
@@ -32,8 +34,8 @@ const electronAPI = {
     listBetween: (start: string, end: string) => ipcRenderer.invoke('schedule:listBetween', start, end),
     listToday: () => ipcRenderer.invoke('schedule:listToday'),
     listByTask: (taskId: string) => ipcRenderer.invoke('schedule:listByTask', taskId),
-    create: (block: any) => ipcRenderer.invoke('schedule:create', block),
-    update: (block: any) => ipcRenderer.invoke('schedule:update', block),
+    create: (block: Partial<ScheduleBlock>) => ipcRenderer.invoke('schedule:create', block),
+    update: (block: ScheduleBlock) => ipcRenderer.invoke('schedule:update', block),
     delete: (id: string) => ipcRenderer.invoke('schedule:delete', id),
     markStatus: (id: string, status: string) => ipcRenderer.invoke('schedule:markStatus', id, status),
   },
@@ -46,19 +48,24 @@ const electronAPI = {
     stop: () => ipcRenderer.invoke('pomodoro:stop'),
     getState: () => ipcRenderer.invoke('pomodoro:getState'),
     onTick: (callback: (data: { remaining: number; total: number }) => void) => {
-      const handler = (_: any, data: any) => callback(data)
+      const handler = (_event: IpcRendererEvent, data: { remaining: number; total: number }) => callback(data)
       ipcRenderer.on('pomodoro:tick', handler)
       return () => ipcRenderer.removeListener('pomodoro:tick', handler)
     },
     onStateChanged: (callback: (state: string) => void) => {
-      const handler = (_: any, state: string) => callback(state)
+      const handler = (_event: IpcRendererEvent, state: string) => callback(state)
       ipcRenderer.on('pomodoro:stateChanged', handler)
       return () => ipcRenderer.removeListener('pomodoro:stateChanged', handler)
     },
     onSessionFinished: (callback: (data: { id: string; kind: string }) => void) => {
-      const handler = (_: any, data: any) => callback(data)
+      const handler = (_event: IpcRendererEvent, data: { id: string; kind: string }) => callback(data)
       ipcRenderer.on('pomodoro:sessionFinished', handler)
       return () => ipcRenderer.removeListener('pomodoro:sessionFinished', handler)
+    },
+    onSessionCancelled: (callback: (data: { id: string }) => void) => {
+      const handler = (_event: IpcRendererEvent, data: { id: string }) => callback(data)
+      ipcRenderer.on('pomodoro:sessionCancelled', handler)
+      return () => ipcRenderer.removeListener('pomodoro:sessionCancelled', handler)
     },
     showMini: () => ipcRenderer.invoke('pomodoro:showMini'),
     hideMini: () => ipcRenderer.invoke('pomodoro:hideMini'),

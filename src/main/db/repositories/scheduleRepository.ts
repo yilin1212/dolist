@@ -2,7 +2,9 @@ import { getDb, markDirty } from '../client'
 import { v4 as uuidv4 } from 'uuid'
 import type { ScheduleBlock } from '../../../../types/models'
 
-function rowToBlock(row: any[]): ScheduleBlock {
+type SqlValue = string | number | null | Uint8Array
+
+function rowToBlock(row: SqlValue[]): ScheduleBlock {
   return {
     id: row[0] as string,
     task_id: row[1] as string,
@@ -17,6 +19,16 @@ export const ScheduleRepo = {
   listBetween(start: string, end: string): ScheduleBlock[] {
     const result = getDb().exec(
       'SELECT * FROM schedule_blocks WHERE start_time >= ? AND start_time < ? ORDER BY start_time',
+      [start, end]
+    )
+    if (result.length === 0) return []
+    return result[0].values.map(rowToBlock)
+  },
+
+  /** Return blocks that overlap the given range (not just those starting within it). */
+  listBetweenOverlap(start: string, end: string): ScheduleBlock[] {
+    const result = getDb().exec(
+      'SELECT * FROM schedule_blocks WHERE end_time > ? AND start_time < ? ORDER BY start_time',
       [start, end]
     )
     if (result.length === 0) return []
@@ -65,6 +77,7 @@ export const ScheduleRepo = {
   },
 
   delete(id: string): void {
+    getDb().run('UPDATE pomodoro_sessions SET schedule_block_id = NULL WHERE schedule_block_id = ?', [id])
     getDb().run('DELETE FROM schedule_blocks WHERE id = ?', [id])
     markDirty()
   },

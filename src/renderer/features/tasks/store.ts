@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import type { Task } from '../../../../types/models'
+import { notifyTasksChanged } from '../../lib/utils'
 
 interface TaskFilters {
   status?: string
@@ -11,7 +12,6 @@ interface TaskFilters {
 interface TaskStore {
   tasks: Task[]
   filters: TaskFilters
-  selectedTaskId: string | null
   loading: boolean
 
   fetchTasks: () => Promise<void>
@@ -21,16 +21,10 @@ interface TaskStore {
   markDone: (id: string) => Promise<void>
   markPending: (id: string) => Promise<void>
   setFilters: (filters: Partial<TaskFilters>) => void
-  setSelectedTask: (id: string | null) => void
 }
 
 let searchDebounce: ReturnType<typeof setTimeout> | null = null
-
-function notifyTasksChanged(): void {
-  if (typeof window !== 'undefined') {
-    window.dispatchEvent(new CustomEvent('tasks:changed'))
-  }
-}
+let fetchRequestCounter = 0
 
 export const useTaskStore = create<TaskStore>((set, get) => ({
   tasks: [],
@@ -38,60 +32,91 @@ export const useTaskStore = create<TaskStore>((set, get) => ({
     include_done: true,
     search: '',
   },
-  selectedTaskId: null,
   loading: false,
 
   fetchTasks: async () => {
+    const requestId = ++fetchRequestCounter
     set({ loading: true })
     try {
       const { filters } = get()
       const tasks = await window.electronAPI.tasks.list(filters)
-      set({ tasks, loading: false })
+      if (requestId === fetchRequestCounter) {
+        set({ tasks, loading: false })
+      }
     } catch (e) {
       console.error('Failed to fetch tasks:', e)
-      set({ loading: false })
+      if (requestId === fetchRequestCounter) {
+        set({ loading: false })
+      }
     }
   },
 
   createTask: async (task) => {
-    const id = await window.electronAPI.tasks.create(task)
-    await get().fetchTasks()
-    notifyTasksChanged()
-    return id
+    try {
+      const id = await window.electronAPI.tasks.create(task)
+      await get().fetchTasks()
+      notifyTasksChanged()
+      return id
+    } catch (e) {
+      console.error('Failed to create task:', e)
+      throw e
+    }
   },
 
   updateTask: async (task) => {
-    await window.electronAPI.tasks.update(task)
-    await get().fetchTasks()
-    notifyTasksChanged()
+    try {
+      await window.electronAPI.tasks.update(task)
+      await get().fetchTasks()
+      notifyTasksChanged()
+    } catch (e) {
+      console.error('Failed to update task:', e)
+      throw e
+    }
   },
 
   deleteTask: async (id) => {
-    await window.electronAPI.tasks.delete(id)
-    await get().fetchTasks()
-    // schedule_blocks are cascade-deleted at the DB layer; notify schedule views
-    notifyTasksChanged()
+    try {
+      await window.electronAPI.tasks.delete(id)
+      await get().fetchTasks()
+      notifyTasksChanged()
+    } catch (e) {
+      console.error('Failed to delete task:', e)
+      throw e
+    }
   },
 
   markDone: async (id) => {
-    await window.electronAPI.tasks.markDone(id)
-    await get().fetchTasks()
-    notifyTasksChanged()
+    try {
+      await window.electronAPI.tasks.markDone(id)
+      await get().fetchTasks()
+      notifyTasksChanged()
+    } catch (e) {
+      console.error('Failed to mark task done:', e)
+      throw e
+    }
   },
 
   markPending: async (id) => {
-    await window.electronAPI.tasks.markPending(id)
-    await get().fetchTasks()
-    notifyTasksChanged()
+    try {
+      await window.electronAPI.tasks.markPending(id)
+      await get().fetchTasks()
+      notifyTasksChanged()
+    } catch (e) {
+      console.error('Failed to mark task pending:', e)
+      throw e
+    }
   },
 
   setFilters: (filters) => {
     set((state) => ({ filters: { ...state.filters, ...filters } }))
-    if (searchDebounce) clearTimeout(searchDebounce)
-    searchDebounce = setTimeout(() => {
+    // Search changes are debounced; other filter changes (status, category, include_done) take effect immediately.
+    if ('search' in filters) {
+      if (searchDebounce) clearTimeout(searchDebounce)
+      searchDebounce = setTimeout(() => {
+        get().fetchTasks()
+      }, 250)
+    } else {
       get().fetchTasks()
-    }, 150)
+    }
   },
-
-  setSelectedTask: (id) => set({ selectedTaskId: id }),
 }))

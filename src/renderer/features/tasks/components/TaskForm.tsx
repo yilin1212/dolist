@@ -1,9 +1,10 @@
-import { useState, useEffect } from 'react'
+import { memo, useState, useEffect } from 'react'
 import { useTaskStore } from '../store'
 import type { Task } from '../../../../types/models'
 import { Button } from '../../../components/ui/button'
 import { Input } from '../../../components/ui/input'
 import { Textarea } from '../../../components/ui/textarea'
+import { Select } from '../../../components/ui/select'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '../../../components/ui/dialog'
 import { useTranslation } from '../../../i18n'
 
@@ -22,7 +23,7 @@ function todayString(): string {
   return `${y}-${m}-${day}`
 }
 
-export default function TaskForm({ open, task, defaultList, onClose }: TaskFormProps) {
+export default memo(function TaskForm({ open, task, defaultList, onClose }: TaskFormProps) {
   const { t } = useTranslation()
   const { createTask, updateTask } = useTaskStore()
   const [title, setTitle] = useState('')
@@ -32,6 +33,8 @@ export default function TaskForm({ open, task, defaultList, onClose }: TaskFormP
   const [dueDate, setDueDate] = useState('')
   const [tagsInput, setTagsInput] = useState('')
   const [saving, setSaving] = useState(false)
+  const [titleError, setTitleError] = useState('')
+  const [formError, setFormError] = useState('')
 
   useEffect(() => {
     if (task) {
@@ -53,7 +56,10 @@ export default function TaskForm({ open, task, defaultList, onClose }: TaskFormP
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!title.trim()) return
+    if (!title.trim()) {
+      setTitleError(t('tasks.titleRequired'))
+      return
+    }
 
     setSaving(true)
     try {
@@ -85,6 +91,9 @@ export default function TaskForm({ open, task, defaultList, onClose }: TaskFormP
         })
       }
       onClose()
+    } catch (e) {
+      console.error('Failed to save task:', e)
+      setFormError(t('common.save') + ' failed')
     } finally {
       setSaving(false)
     }
@@ -106,11 +115,15 @@ export default function TaskForm({ open, task, defaultList, onClose }: TaskFormP
               </label>
               <Input
                 value={title}
-                onChange={(e) => setTitle(e.target.value)}
+                onChange={(e) => { setTitle(e.target.value); setTitleError(''); setFormError('') }}
                 placeholder={t('tasks.titlePlaceholder')}
                 autoFocus
                 required
+                aria-invalid={!!titleError}
+                aria-describedby={titleError ? 'title-error' : undefined}
+                className={titleError ? 'border-destructive-500 focus-visible:ring-destructive-500/30' : ''}
               />
+              {titleError && <p id="title-error" className="mt-1 text-xs text-destructive-500" role="alert">{titleError}</p>}
             </div>
 
             {/* Description */}
@@ -128,8 +141,7 @@ export default function TaskForm({ open, task, defaultList, onClose }: TaskFormP
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="mb-1.5 block text-sm font-medium text-neutral-700">{t('tasks.priority')}</label>
-                <select
-                  className="w-full rounded-md border border-neutral-200 bg-white px-3 py-2 text-sm focus:border-primary-500 focus:outline-none"
+                <Select
                   value={priority}
                   onChange={(e) => setPriority(Number(e.target.value))}
                 >
@@ -137,7 +149,7 @@ export default function TaskForm({ open, task, defaultList, onClose }: TaskFormP
                   <option value={2}>{t('tasks.priorityLabel.normal')}</option>
                   <option value={3}>{t('tasks.priorityLabel.high')}</option>
                   <option value={4}>{t('tasks.priorityLabel.urgent')}</option>
-                </select>
+                </Select>
               </div>
               <div>
                 <label className="mb-1.5 block text-sm font-medium text-neutral-700">
@@ -147,7 +159,7 @@ export default function TaskForm({ open, task, defaultList, onClose }: TaskFormP
                   type="number"
                   min={0}
                   value={estimatedMinutes}
-                  onChange={(e) => setEstimatedMinutes(Number(e.target.value))}
+                  onChange={(e) => setEstimatedMinutes(Math.max(0, Number(e.target.value) || 0))}
                 />
               </div>
             </div>
@@ -173,6 +185,7 @@ export default function TaskForm({ open, task, defaultList, onClose }: TaskFormP
             </div>
           </div>
 
+          {formError && <p className="mt-2 text-sm text-destructive-500" role="alert">{formError}</p>}
           <DialogFooter className="mt-6">
             <Button type="button" variant="ghost" onClick={onClose}>
               {t('common.cancel')}
@@ -185,4 +198,4 @@ export default function TaskForm({ open, task, defaultList, onClose }: TaskFormP
       </DialogContent>
     </Dialog>
   )
-}
+})

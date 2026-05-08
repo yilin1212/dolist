@@ -1,12 +1,13 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { PageHeader } from '../../components/ui/page-header'
 import { Card, CardHeader, CardTitle, CardContent } from '../../components/ui/card'
 import { Input } from '../../components/ui/input'
+import { Select } from '../../components/ui/select'
 import { Button } from '../../components/ui/button'
 import { useTranslation } from '../../i18n'
 
 export default function SettingsPage() {
-  const { t } = useTranslation()
+  const { t, locale, setLocale } = useTranslation()
   const [settings, setSettings] = useState({
     pomodoro_focus_min: 25,
     pomodoro_short_break_min: 5,
@@ -21,12 +22,12 @@ export default function SettingsPage() {
     const load = async () => {
       try {
         const keys = Object.keys(settings) as Array<keyof typeof settings>
-        const loaded: any = {}
+        const loaded: Partial<typeof settings> = {}
         for (const key of keys) {
           if (key === 'locale') {
             loaded[key] = await window.electronAPI.settings.get(key) || 'zh-CN'
           } else {
-            loaded[key] = await window.electronAPI.settings.getInt(key, (settings as any)[key])
+            loaded[key] = await window.electronAPI.settings.getInt(key, settings[key])
           }
         }
         setSettings(loaded)
@@ -37,14 +38,36 @@ export default function SettingsPage() {
     load()
   }, [])
 
-  const saveSetting = async (key: string, value: number | string) => {
-    if (typeof value === 'number') {
-      await window.electronAPI.settings.setInt(key, value)
-    } else {
-      await window.electronAPI.settings.set(key, value)
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  const saveSetting = useCallback(async (key: string, value: number | string) => {
+    try {
+      if (typeof value === 'number') {
+        if (isNaN(value)) return
+        if (key.startsWith('workday_')) {
+          if (value < 0 || value > 23) return
+        } else if (value < 1) return
+        // Debounce number inputs to avoid IPC on every keystroke
+        if (debounceRef.current) clearTimeout(debounceRef.current)
+        setSettings((prev) => ({ ...prev, [key]: value }))
+        debounceRef.current = setTimeout(() => {
+          window.electronAPI.settings.setInt(key, value).catch((e) => console.error('Failed to save setting:', e))
+        }, 400)
+      } else {
+        // For locale, route through the i18n context so the UI updates
+        // immediately and the value is persisted in one place.
+        if (key === 'locale' && (value === 'zh-CN' || value === 'en')) {
+          setLocale(value)
+          setSettings((prev) => ({ ...prev, [key]: value }))
+        } else {
+          await window.electronAPI.settings.set(key, value)
+          setSettings((prev) => ({ ...prev, [key]: value }))
+        }
+      }
+    } catch (e) {
+      console.error('Failed to save setting:', e)
     }
-    setSettings((prev) => ({ ...prev, [key]: value }))
-  }
+  }, [setLocale])
 
   return (
     <div className="flex h-full flex-col p-6">
@@ -135,14 +158,15 @@ export default function SettingsPage() {
             <CardTitle className="text-base">{t('settings.language')}</CardTitle>
           </CardHeader>
           <CardContent>
-            <select
-              className="w-full rounded-md border border-neutral-300 bg-white px-3 py-2 text-sm"
+            <Select
+              id="locale-select"
+              aria-label={t('settings.language')}
               value={settings.locale}
               onChange={(e) => saveSetting('locale', e.target.value)}
             >
               <option value="zh-CN">中文</option>
               <option value="en">English</option>
-            </select>
+            </Select>
           </CardContent>
         </Card>
       </div>

@@ -4,6 +4,8 @@ import { format, isSameDay, parseISO } from 'date-fns'
 import { zhCN } from 'date-fns/locale'
 import { Timer, ChevronUp, ChevronDown, X } from 'lucide-react'
 import { PageHeader } from '../../components/ui/page-header'
+import { Button } from '../../components/ui/button'
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '../../components/ui/dialog'
 import { useTranslation } from '../../i18n'
 import { useScheduleStore } from '../schedule/store'
 import { useTaskStore } from '../tasks/store'
@@ -13,12 +15,14 @@ import 'react-day-picker/dist/style.css'
 export default function CalendarView() {
   const { t, locale } = useTranslation()
   const [selectedDate, setSelectedDate] = useState<Date>(new Date())
-  const { blocks, loadRange, deleteBlock, updateBlock } = useScheduleStore()
-  const { tasks, fetchTasks } = useTaskStore()
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null)
+  const { blocks, loading: scheduleLoading, loadRange, deleteBlock, refresh } = useScheduleStore()
+  const { tasks, loading: tasksLoading, fetchTasks } = useTaskStore()
   const startFocus = usePomodoroStore((s) => s.startFocus)
 
+  useEffect(() => { fetchTasks() }, [])
+
   useEffect(() => {
-    fetchTasks()
     const start = new Date(selectedDate.getFullYear(), selectedDate.getMonth(), 1).toISOString()
     const end = new Date(selectedDate.getFullYear(), selectedDate.getMonth() + 1, 1).toISOString()
     loadRange(start, end)
@@ -44,15 +48,33 @@ export default function CalendarView() {
     })
     .sort((a, b) => a.start_time.localeCompare(b.start_time))
 
-  // Swap the time slots of two blocks (move-up / move-down).
+  const [swapping, setSwapping] = useState(false)
+  // Swap the time slots of two blocks (move-up / move-down). Bypass the store's
+  // per-call refresh so both writes land before the renderer re-fetches and we
+  // never flash a "two blocks at the same time" intermediate state.
   const swapBlocks = async (a: typeof dayBlocks[number], b: typeof dayBlocks[number]) => {
-    await updateBlock({ ...a, start_time: b.start_time, end_time: b.end_time })
-    await updateBlock({ ...b, start_time: a.start_time, end_time: a.end_time })
+    if (swapping) return
+    setSwapping(true)
+    try {
+      await window.electronAPI.schedule.update({ ...a, start_time: b.start_time, end_time: b.end_time })
+      await window.electronAPI.schedule.update({ ...b, start_time: a.start_time, end_time: a.end_time })
+      await refresh()
+    } catch (e) {
+      console.error('Failed to swap blocks:', e)
+    } finally {
+      setSwapping(false)
+    }
   }
 
-  const handleDelete = async (id: string) => {
-    if (!confirm(t('schedule.deleteBlockConfirm'))) return
-    await deleteBlock(id)
+  const handleDelete = async () => {
+    if (!confirmDeleteId) return
+    try {
+      await deleteBlock(confirmDeleteId)
+    } catch (e) {
+      console.error('Failed to delete block:', e)
+    } finally {
+      setConfirmDeleteId(null)
+    }
   }
 
   return (
@@ -83,7 +105,9 @@ export default function CalendarView() {
           <h3 className="mb-4 text-lg font-semibold">
             {format(selectedDate, locale === 'zh-CN' ? 'yyyy年M月d日 EEEE' : 'EEEE, MMM d, yyyy', { locale: locale === 'zh-CN' ? zhCN : undefined })}
           </h3>
-          {dayBlocks.length === 0 ? (
+          {scheduleLoading || tasksLoading ? (
+            <div className="flex items-center justify-center py-20 text-neutral-500">{t('common.loading')}</div>
+          ) : dayBlocks.length === 0 ? (
             <p className="text-sm text-neutral-500">{t('common.noSchedule')}</p>
           ) : (
             <div className="space-y-2">
@@ -115,6 +139,7 @@ export default function CalendarView() {
                           onClick={() => prev && swapBlocks(block, prev)}
                           disabled={!prev}
                           className="rounded p-1 text-neutral-400 hover:bg-neutral-100 hover:text-neutral-700 disabled:opacity-30 disabled:cursor-not-allowed"
+                          aria-label={t('schedule.moveUp')}
                           title={t('schedule.moveUp')}
                         >
                           <ChevronUp size={14} />
@@ -123,20 +148,23 @@ export default function CalendarView() {
                           onClick={() => next && swapBlocks(block, next)}
                           disabled={!next}
                           className="rounded p-1 text-neutral-400 hover:bg-neutral-100 hover:text-neutral-700 disabled:opacity-30 disabled:cursor-not-allowed"
+                          aria-label={t('schedule.moveDown')}
                           title={t('schedule.moveDown')}
                         >
                           <ChevronDown size={14} />
                         </button>
                         <button
-                          onClick={() => startFocus(minutes, block.task_id, block.id)}
+                          onClick={() => startFocus(minutes, block.task_id, block.id).catch(() => {})}
                           className="rounded p-1 text-neutral-400 hover:bg-primary-50 hover:text-primary-600"
+                          aria-label={t('common.startPomodoro')}
                           title={t('common.startPomodoro')}
                         >
                           <Timer size={14} />
                         </button>
                         <button
-                          onClick={() => handleDelete(block.id)}
+                          onClick={() => setConfirmDeleteId(block.id)}
                           className="rounded p-1 text-neutral-400 hover:bg-destructive-50 hover:text-destructive-500"
+                          aria-label={t('common.delete')}
                           title={t('common.delete')}
                         >
                           <X size={14} />
@@ -150,6 +178,19 @@ export default function CalendarView() {
           )}
         </div>
       </div>
+
+      <Dialog open={!!confirmDeleteId} onOpenChange={(v) => !v && setConfirmDeleteId(null)}>
+        <DialogContent className="sm:max-w-[360px]">
+          <DialogHeader>
+            <DialogTitle>{t('common.delete')}</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-neutral-600">{t('schedule.deleteBlockConfirm')}</p>
+          <DialogFooter className="mt-4">
+            <Button variant="ghost" onClick={() => setConfirmDeleteId(null)}>{t('common.cancel')}</Button>
+            <Button variant="destructive" onClick={handleDelete}>{t('common.delete')}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

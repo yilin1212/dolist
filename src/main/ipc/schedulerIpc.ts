@@ -7,8 +7,10 @@ interface TimeSlot {
 }
 
 const GRANULARITY = 15
+const LOOKAHEAD_DAYS = 4
+const MAX_OFFSETS = 8
 
-function floorToGranularity(dt: Date): Date {
+function ceilToGranularity(dt: Date): Date {
   const d = new Date(dt)
   const discard = d.getMinutes() % GRANULARITY
   d.setMinutes(d.getMinutes() - discard, 0, 0)
@@ -32,12 +34,12 @@ function dailyFreeSlots(day: Date, startFrom?: Date): Array<{ start: Date; end: 
   const dayEnd = new Date(day.getFullYear(), day.getMonth(), day.getDate(), endH, 0)
 
   if (startFrom && startFrom.toDateString() === day.toDateString()) {
-    const floored = floorToGranularity(startFrom)
+    const floored = ceilToGranularity(startFrom)
     if (floored > dayStart) dayStart.setTime(floored.getTime())
   }
   if (dayStart >= dayEnd) return []
 
-  const blocks = ScheduleRepo.listBetween(dayStart.toISOString(), dayEnd.toISOString())
+  const blocks = ScheduleRepo.listBetweenOverlap(dayStart.toISOString(), dayEnd.toISOString())
     .sort((a, b) => a.start_time.localeCompare(b.start_time))
 
   const free: Array<{ start: Date; end: Date }> = []
@@ -84,7 +86,7 @@ function groupByDay(
     return picked.length >= numPieces ? picked : []
   }
 
-  for (let offset = 0; offset < Math.min(sorted.length, 8); offset++) {
+  for (let offset = 0; offset < Math.min(sorted.length, MAX_OFFSETS); offset++) {
     const g = takeNonOverlapping(offset)
     if (g.length >= numPieces) groups.push(g)
   }
@@ -98,14 +100,13 @@ function recommendSlots(
 ): TimeSlot[][] {
   if (durationMinutes <= 0) return []
   numPieces = Math.max(1, numPieces)
-  let perPiece = Math.ceil(durationMinutes / numPieces)
-  perPiece = Math.ceil(perPiece / GRANULARITY) * GRANULARITY
+  let perPiece = Math.ceil(durationMinutes / numPieces / GRANULARITY) * GRANULARITY
 
   const startFrom = new Date()
   const today = startFrom
 
   const allFree: Array<{ start: Date; end: Date }> = []
-  for (let delta = 0; delta < 4; delta++) {
+  for (let delta = 0; delta < LOOKAHEAD_DAYS; delta++) {
     const day = new Date(today.getFullYear(), today.getMonth(), today.getDate() + delta)
     allFree.push(...dailyFreeSlots(day, startFrom))
   }
@@ -124,7 +125,7 @@ function recommendSlots(
     const options: TimeSlot[][] = []
     const seen = new Set<string>()
     for (const s of candidateStarts) {
-      const e = new Date(s.getTime() + durationMinutes * 60000)
+      const e = new Date(s.getTime() + perPiece * 60000)
       const bucket = `${s.toDateString()}-${dayPeriodLabel(s)}`
       if (seen.has(bucket)) continue
       if (!fitsInFree(s, e, allFree)) continue
@@ -149,7 +150,12 @@ function recommendSlots(
 }
 
 export function registerSchedulerIpc(): void {
-  ipcMain.handle('scheduler:recommendSlots', (_, durationMinutes: number, numPieces?: number, maxOptions?: number) =>
-    recommendSlots(durationMinutes, numPieces, maxOptions)
-  )
+  ipcMain.handle('scheduler:recommendSlots', (_, durationMinutes: number, numPieces?: number, maxOptions?: number) => {
+    try {
+      return recommendSlots(durationMinutes, numPieces, maxOptions)
+    } catch (e) {
+      console.error('Failed to recommend slots:', e)
+      return []
+    }
+  })
 }

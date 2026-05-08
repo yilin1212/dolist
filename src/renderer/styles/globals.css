@@ -83,10 +83,29 @@
   background: rgba(55, 53, 47, 0.32) !important;
 }
 
+/* Dark mode scrollbar colors */
+.dark ::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0);
+}
+.dark *:hover::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.15);
+}
+.dark ::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.3) !important;
+}
+
 /* Frameless window drag region */
 [data-tauri-drag-region],
 .app-drag-region {
   -webkit-app-region: drag;
+}
+
+/* Radix ScrollArea wraps content in a div with `display: table; min-width: 100%`
+   so the inner box grows to its content width. That breaks `truncate` and
+   `min-w-0` for any flex children with very long text. Force a regular block
+   layout so width constraints from the viewport propagate down. */
+[data-radix-scroll-area-viewport] > div {
+  display: block !important;
 }
 
 /* Task item animations */

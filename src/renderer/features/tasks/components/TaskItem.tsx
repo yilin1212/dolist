@@ -1,19 +1,13 @@
-import { useState } from 'react'
+import { memo, useState } from 'react'
 import { Timer, Calendar, Pencil, Trash2 } from 'lucide-react'
+import { parseISO } from 'date-fns'
 import { useTaskStore } from '../store'
 import { usePomodoroStore } from '../../pomodoro/store'
 import type { Task } from '../../../../types/models'
-import { cn } from '../../../lib/utils'
+import { cn, PRIORITY_COLORS } from '../../../lib/utils'
 import { useTranslation } from '../../../i18n'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '../../../components/ui/dialog'
 import { Button } from '../../../components/ui/button'
-
-const PRIORITY_COLORS: Record<number, string> = {
-  1: 'bg-neutral-500',
-  2: 'bg-primary-500',
-  3: 'bg-warning-500',
-  4: 'bg-destructive-500',
-}
 
 interface TaskItemProps {
   task: Task
@@ -21,7 +15,7 @@ interface TaskItemProps {
   onSchedule: (task: Task) => void
 }
 
-export default function TaskItem({ task, onEdit, onSchedule }: TaskItemProps) {
+export default memo(function TaskItem({ task, onEdit, onSchedule }: TaskItemProps) {
   const { t, locale } = useTranslation()
   const { markDone, markPending, deleteTask } = useTaskStore()
   const { startFocus } = usePomodoroStore()
@@ -35,11 +29,15 @@ export default function TaskItem({ task, onEdit, onSchedule }: TaskItemProps) {
   }
   const isDone = task.status === 'done'
 
-  const handleToggle = () => {
-    if (isDone) {
-      markPending(task.id)
-    } else {
-      markDone(task.id)
+  const handleToggle = async () => {
+    try {
+      if (isDone) {
+        await markPending(task.id)
+      } else {
+        await markDone(task.id)
+      }
+    } catch (e) {
+      console.error('Failed to toggle task status:', e)
     }
   }
 
@@ -53,6 +51,8 @@ export default function TaskItem({ task, onEdit, onSchedule }: TaskItemProps) {
       {/* Checkbox */}
       <button
         onClick={handleToggle}
+        aria-label={t('common.toggleDone')}
+        title={t('common.toggleDone')}
         className={cn(
           'flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full border-2 transition-colors',
           isDone
@@ -79,7 +79,7 @@ export default function TaskItem({ task, onEdit, onSchedule }: TaskItemProps) {
       {/* Title */}
       <span
         className={cn(
-          'flex-1 truncate text-sm',
+          'min-w-0 flex-1 truncate text-sm',
           isDone ? 'text-neutral-500 line-through' : 'text-neutral-900'
         )}
       >
@@ -111,15 +111,16 @@ export default function TaskItem({ task, onEdit, onSchedule }: TaskItemProps) {
       {/* Due date */}
       {task.due_date && (
         <span className="text-xs text-neutral-500">
-          {new Date(task.due_date).toLocaleDateString(locale, { month: 'short', day: 'numeric' })}
+          {parseISO(task.due_date).toLocaleDateString(locale, { month: 'short', day: 'numeric' })}
         </span>
       )}
 
       {/* Actions (visible on hover) */}
       <div className="flex items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
         <button
-          onClick={() => startFocus(task.estimated_minutes || 25, task.id)}
+          onClick={() => startFocus(task.estimated_minutes || 25, task.id).catch(() => {})}
           className="rounded p-1 text-neutral-500 hover:bg-neutral-150 hover:text-neutral-900"
+          aria-label={t('common.startPomodoro')}
           title={t('common.startPomodoro')}
         >
           <Timer size={14} />
@@ -127,6 +128,7 @@ export default function TaskItem({ task, onEdit, onSchedule }: TaskItemProps) {
         <button
           onClick={() => onSchedule(task)}
           className="rounded p-1 text-neutral-500 hover:bg-neutral-150 hover:text-neutral-900"
+          aria-label={t('common.schedule')}
           title={t('common.schedule')}
         >
           <Calendar size={14} />
@@ -134,6 +136,7 @@ export default function TaskItem({ task, onEdit, onSchedule }: TaskItemProps) {
         <button
           onClick={() => onEdit(task)}
           className="rounded p-1 text-neutral-500 hover:bg-neutral-150 hover:text-neutral-900"
+          aria-label={t('common.edit')}
           title={t('common.edit')}
         >
           <Pencil size={14} />
@@ -141,6 +144,7 @@ export default function TaskItem({ task, onEdit, onSchedule }: TaskItemProps) {
         <button
           onClick={() => setConfirmDelete(true)}
           className="rounded p-1 text-neutral-500 hover:bg-destructive-50 hover:text-destructive-500"
+          aria-label={t('common.delete')}
           title={t('common.delete')}
         >
           <Trash2 size={14} />
@@ -159,7 +163,14 @@ export default function TaskItem({ task, onEdit, onSchedule }: TaskItemProps) {
             </Button>
             <Button
               variant="destructive"
-              onClick={() => { deleteTask(task.id); setConfirmDelete(false) }}
+              onClick={async () => {
+                try {
+                  await deleteTask(task.id)
+                  setConfirmDelete(false)
+                } catch {
+                  // dialog stays open so user can retry
+                }
+              }}
             >
               {t('common.delete')}
             </Button>
@@ -168,4 +179,4 @@ export default function TaskItem({ task, onEdit, onSchedule }: TaskItemProps) {
       </Dialog>
     </div>
   )
-}
+})

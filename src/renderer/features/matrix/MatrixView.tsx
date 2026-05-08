@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react'
+import { memo, useCallback, useEffect, useMemo, useState } from 'react'
+import { useHotkeys } from 'react-hotkeys-hook'
 import {
   DndContext,
   DragOverlay,
@@ -45,7 +46,7 @@ const collision: CollisionDetection = (args) => {
 
 export default function MatrixView() {
   const { t } = useTranslation()
-  const { tasks, fetchTasks, updateTask } = useTaskStore()
+  const { tasks, loading, fetchTasks, updateTask } = useTaskStore()
   const [showForm, setShowForm] = useState(false)
   const [editingTask, setEditingTask] = useState<Task | null>(null)
   const [schedulingTask, setSchedulingTask] = useState<Task | null>(null)
@@ -53,23 +54,42 @@ export default function MatrixView() {
 
   useEffect(() => { fetchTasks() }, [])
 
+  useHotkeys('ctrl+n, meta+n', (e) => {
+    e.preventDefault()
+    setEditingTask(null)
+    setShowForm(true)
+  })
+
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }))
 
-  const pendingTasks = tasks.filter((task) => task.status !== 'done' && task.status !== 'cancelled')
+  const pendingTasks = useMemo(() => tasks.filter((task) => task.status !== 'done' && task.status !== 'cancelled'), [tasks])
 
-  const quadrants: Array<{ id: QuadrantId; label: string; color: string }> = [
+  const quadrants = useMemo<Array<{ id: QuadrantId; label: string; color: string }>>(() => [
     { id: 'ui', label: t('matrix.quadrants.urgentImportant'), color: 'border-destructive-300 bg-destructive-50' },
     { id: 'ni', label: t('matrix.quadrants.importantNotUrgent'), color: 'border-primary-300 bg-primary-50' },
     { id: 'un', label: t('matrix.quadrants.urgentNotImportant'), color: 'border-warning-300 bg-warning-50' },
     { id: 'nn', label: t('matrix.quadrants.notUrgentNotImportant'), color: 'border-neutral-300 bg-neutral-50' },
-  ]
+  ], [t])
+
+  const tasksByQuadrant = useMemo(() => {
+    const map: Record<QuadrantId, Task[]> = { ui: [], ni: [], un: [], nn: [] }
+    for (const task of pendingTasks) {
+      map[priorityToQuadrant(task.priority)].push(task)
+    }
+    return map
+  }, [pendingTasks])
 
   const activeTask = activeId ? tasks.find((t) => t.id === activeId) || null : null
 
-  const handleDragStart = (e: DragStartEvent) => setActiveId(e.active.id as string)
-  const handleDragCancel = () => setActiveId(null)
+  const handleEdit = useCallback((task: Task) => { setEditingTask(task); setShowForm(true) }, [])
+  const handleSchedule = useCallback((task: Task) => { setSchedulingTask(task) }, [])
+  const handleCloseForm = useCallback(() => { setShowForm(false); setEditingTask(null) }, [])
+  const handleCloseSchedule = useCallback(() => setSchedulingTask(null), [])
 
-  const handleDragEnd = (event: DragEndEvent) => {
+  const handleDragStart = useCallback((e: DragStartEvent) => setActiveId(e.active.id as string), [])
+  const handleDragCancel = useCallback(() => setActiveId(null), [])
+
+  const handleDragEnd = async (event: DragEndEvent) => {
     setActiveId(null)
     const { active, over } = event
     if (!over) return
@@ -90,7 +110,11 @@ export default function MatrixView() {
     if (!task) return
     const newPriority = QUADRANT_PRIORITY[targetQ]
     if (task.priority !== newPriority) {
-      updateTask({ ...task, priority: newPriority })
+      try {
+        await updateTask({ ...task, priority: newPriority })
+      } catch (e) {
+        console.error('Failed to update task priority:', e)
+      }
     }
   }
 
@@ -106,20 +130,19 @@ export default function MatrixView() {
         onDragCancel={handleDragCancel}
       >
         <div className="grid flex-1 grid-cols-2 grid-rows-2 gap-3 overflow-hidden">
-          {quadrants.map((q) => {
-            const qTasks = pendingTasks.filter((task) => priorityToQuadrant(task.priority) === q.id)
-            return (
-              <Quadrant
-                key={q.id}
-                id={q.id}
-                label={q.label}
-                color={q.color}
-                tasks={qTasks}
-                onEdit={(task) => { setEditingTask(task); setShowForm(true) }}
-                onSchedule={(task) => setSchedulingTask(task)}
-              />
-            )
-          })}
+          {loading ? (
+            <div className="col-span-2 row-span-2 flex items-center justify-center text-neutral-500">{t('common.loading')}</div>
+          ) : quadrants.map((q) => (
+            <Quadrant
+              key={q.id}
+              id={q.id}
+              label={q.label}
+              color={q.color}
+              tasks={tasksByQuadrant[q.id]}
+              onEdit={handleEdit}
+              onSchedule={handleSchedule}
+            />
+          ))}
         </div>
 
         <DragOverlay dropAnimation={null}>
@@ -134,13 +157,13 @@ export default function MatrixView() {
       <TaskForm
         open={showForm}
         task={editingTask}
-        onClose={() => { setShowForm(false); setEditingTask(null) }}
+        onClose={handleCloseForm}
       />
       <ScheduleDialog
         open={!!schedulingTask}
         task={schedulingTask}
-        onClose={() => setSchedulingTask(null)}
-        onScheduled={() => { setSchedulingTask(null); fetchTasks() }}
+        onClose={handleCloseSchedule}
+        onScheduled={() => { handleCloseSchedule(); fetchTasks() }}
       />
     </div>
   )
@@ -155,7 +178,7 @@ interface QuadrantProps {
   onSchedule: (task: Task) => void
 }
 
-function Quadrant({ id, label, color, tasks, onEdit, onSchedule }: QuadrantProps) {
+const Quadrant = memo(function Quadrant({ id, label, color, tasks, onEdit, onSchedule }: QuadrantProps) {
   const { t } = useTranslation()
   const { setNodeRef, isOver } = useDroppable({ id })
 
@@ -178,7 +201,7 @@ function Quadrant({ id, label, color, tasks, onEdit, onSchedule }: QuadrantProps
       </div>
     </div>
   )
-}
+})
 
 interface DraggableTaskProps {
   task: Task
@@ -186,7 +209,7 @@ interface DraggableTaskProps {
   onSchedule: (task: Task) => void
 }
 
-function DraggableTask({ task, onEdit, onSchedule }: DraggableTaskProps) {
+const DraggableTask = memo(function DraggableTask({ task, onEdit, onSchedule }: DraggableTaskProps) {
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({ id: task.id })
 
   return (
@@ -195,8 +218,17 @@ function DraggableTask({ task, onEdit, onSchedule }: DraggableTaskProps) {
       {...listeners}
       {...attributes}
       className={isDragging ? 'opacity-30' : ''}
+      onPointerDown={(e) => {
+        // Allow buttons inside TaskItem to receive clicks without initiating drag
+        const target = e.target as HTMLElement
+        if (target.closest('button')) {
+          e.stopPropagation()
+          return
+        }
+        listeners?.onPointerDown?.(e)
+      }}
     >
       <TaskItem task={task} onEdit={onEdit} onSchedule={onSchedule} />
     </div>
   )
-}
+})

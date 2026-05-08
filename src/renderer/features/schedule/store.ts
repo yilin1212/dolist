@@ -40,32 +40,57 @@ export const useScheduleStore = create<ScheduleStore>((set, get) => ({
   },
 
   createBlock: async (block) => {
-    const id = await window.electronAPI.schedule.create(block)
-    await get().refresh()
-    return id
+    try {
+      const id = await window.electronAPI.schedule.create(block)
+      await get().refresh()
+      return id
+    } catch (e) {
+      console.error('Failed to create schedule block:', e)
+      throw e
+    }
   },
 
   updateBlock: async (block) => {
-    await window.electronAPI.schedule.update(block)
-    await get().refresh()
+    try {
+      await window.electronAPI.schedule.update(block)
+      await get().refresh()
+    } catch (e) {
+      console.error('Failed to update schedule block:', e)
+      throw e
+    }
   },
 
   deleteBlock: async (id) => {
-    await window.electronAPI.schedule.delete(id)
-    await get().refresh()
+    try {
+      await window.electronAPI.schedule.delete(id)
+      await get().refresh()
+    } catch (e) {
+      console.error('Failed to delete schedule block:', e)
+      throw e
+    }
   },
 
   markStatus: async (id, status) => {
-    await window.electronAPI.schedule.markStatus(id, status)
-    await get().refresh()
+    try {
+      await window.electronAPI.schedule.markStatus(id, status)
+      await get().refresh()
+    } catch (e) {
+      console.error('Failed to mark schedule block status:', e)
+      throw e
+    }
   },
 }))
 
 // When tasks change (create/update/delete), schedule_blocks may have been
 // cascade-deleted (FK ON DELETE CASCADE) or new ones added by ScheduleDialog.
-// Refresh whoever is currently scoped to a range.
+// Refresh whoever is currently scoped to a range. Debounced to coalesce
+// rapid-fire events (e.g. bulk task operations).
 if (typeof window !== 'undefined') {
+  let refreshTimeout: ReturnType<typeof setTimeout> | null = null
   window.addEventListener('tasks:changed', () => {
-    useScheduleStore.getState().refresh()
+    if (refreshTimeout) clearTimeout(refreshTimeout)
+    refreshTimeout = setTimeout(() => {
+      useScheduleStore.getState().refresh()
+    }, 200)
   })
 }

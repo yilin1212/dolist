@@ -1,14 +1,12 @@
+import { memo } from 'react'
 import { useSortable } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
+import { parseISO } from 'date-fns'
 import { Pencil, Timer } from 'lucide-react'
 import type { Task } from '../../../../../types/models'
-import { cn } from '../../../lib/utils'
+import { cn, PRIORITY_COLORS } from '../../../lib/utils'
 import { useTranslation } from '../../../i18n'
 import { usePomodoroStore } from '../../pomodoro/store'
-
-const PRIORITY_COLORS: Record<number, string> = {
-  1: 'bg-neutral-500', 2: 'bg-primary-500', 3: 'bg-warning-500', 4: 'bg-destructive-500',
-}
 
 interface KanbanCardProps {
   task: Task
@@ -16,7 +14,7 @@ interface KanbanCardProps {
   dragOverlay?: boolean
 }
 
-export default function KanbanCard({ task, onEdit, dragOverlay }: KanbanCardProps) {
+export default memo(function KanbanCard({ task, onEdit, dragOverlay }: KanbanCardProps) {
   const { locale, t } = useTranslation()
   const startFocus = usePomodoroStore((s) => s.startFocus)
   const sortable = useSortable({ id: task.id, disabled: dragOverlay })
@@ -59,7 +57,7 @@ export default function KanbanCard({ task, onEdit, dragOverlay }: KanbanCardProp
           )}
           {task.due_date && (
             <p className="mt-1 text-xs text-neutral-500">
-              {new Date(task.due_date).toLocaleDateString(locale, { month: 'short', day: 'numeric' })}
+              {parseISO(task.due_date).toLocaleDateString(locale, { month: 'short', day: 'numeric' })}
             </p>
           )}
         </div>
@@ -67,8 +65,9 @@ export default function KanbanCard({ task, onEdit, dragOverlay }: KanbanCardProp
           <div className="flex items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
             <button
               onPointerDown={stop}
-              onClick={(e) => { e.stopPropagation(); startFocus(task.estimated_minutes || 25, task.id) }}
+              onClick={(e) => { e.stopPropagation(); startFocus(task.estimated_minutes || 25, task.id).catch(() => {}) }}
               className="rounded p-1 text-neutral-400 hover:bg-primary-50 hover:text-primary-600"
+              aria-label={t('common.startPomodoro')}
               title={t('common.startPomodoro')}
             >
               <Timer size={12} />
@@ -77,6 +76,7 @@ export default function KanbanCard({ task, onEdit, dragOverlay }: KanbanCardProp
               onPointerDown={stop}
               onClick={(e) => { e.stopPropagation(); onEdit() }}
               className="rounded p-1 text-neutral-400 hover:bg-neutral-100 hover:text-neutral-600"
+              aria-label={t('common.edit')}
               title={t('common.edit')}
             >
               <Pencil size={12} />
@@ -86,4 +86,4 @@ export default function KanbanCard({ task, onEdit, dragOverlay }: KanbanCardProp
       </div>
     </div>
   )
-}
+})

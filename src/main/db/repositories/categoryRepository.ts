@@ -34,6 +34,7 @@ export const CategoryRepo = {
   },
 
   delete(id: string): void {
+    getDb().run('UPDATE tasks SET category_id = NULL WHERE category_id = ?', [id])
     getDb().run('DELETE FROM categories WHERE id = ?', [id])
     markDirty()
   },

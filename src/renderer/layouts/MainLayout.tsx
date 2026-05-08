@@ -1,6 +1,6 @@
 import { useEffect, useMemo } from 'react'
 import { Outlet, useNavigate } from 'react-router-dom'
-import { Pause, Play, Square, Maximize2 } from 'lucide-react'
+import { Pause, Play, Square, Minimize2 } from 'lucide-react'
 import Sidebar from '../features/navigation/Sidebar'
 import WindowControls from './WindowControls'
 import { usePomodoroStore } from '../features/pomodoro/store'
@@ -65,7 +65,7 @@ function PomodoroDock() {
   const ringColor = kind === 'focus' ? '#2383E2' : '#0F9D58'
 
   return (
-    <div className="fixed bottom-4 left-4 z-40 flex items-center gap-2 rounded-xl border border-neutral-200 bg-white/95 px-3 py-2 shadow-lg backdrop-blur">
+    <div className="fixed bottom-4 left-[240px] z-40 flex items-center gap-2 rounded-xl border border-neutral-200 bg-white/95 px-3 py-2 shadow-lg backdrop-blur">
       <button
         onClick={() => navigate('/pomodoro')}
         className="flex items-center gap-2 rounded-md text-left hover:bg-neutral-50 px-1 py-0.5"
@@ -80,8 +80,9 @@ function PomodoroDock() {
       <div className="flex items-center gap-0.5 border-l border-neutral-200 pl-1.5">
         {(state === 'focusing' || state === 'break') && (
           <button
-            onClick={pause}
+            onClick={() => pause()}
             className="rounded p-1 text-neutral-500 hover:bg-neutral-100 hover:text-neutral-800"
+            aria-label={t('pomodoro.pause')}
             title={t('pomodoro.pause')}
           >
             <Pause size={14} />
@@ -89,26 +90,29 @@ function PomodoroDock() {
         )}
         {state === 'paused' && (
           <button
-            onClick={resume}
+            onClick={() => resume()}
             className="rounded p-1 text-neutral-500 hover:bg-neutral-100 hover:text-neutral-800"
+            aria-label={t('pomodoro.resume')}
             title={t('pomodoro.resume')}
           >
             <Play size={14} />
           </button>
         )}
         <button
-          onClick={stop}
+          onClick={() => stop().catch(() => {})}
           className="rounded p-1 text-neutral-500 hover:bg-destructive-50 hover:text-destructive-600"
+          aria-label={t('pomodoro.stop')}
           title={t('pomodoro.stop')}
         >
           <Square size={14} />
         </button>
         <button
-          onClick={() => window.electronAPI.pomodoro.showMini()}
+          onClick={() => window.electronAPI.pomodoro.showMini().catch(() => {})}
           className="rounded p-1 text-neutral-500 hover:bg-neutral-100 hover:text-neutral-800"
+          aria-label={t('pomodoro.mini')}
           title={t('pomodoro.mini')}
         >
-          <Maximize2 size={14} />
+          <Minimize2 size={14} />
         </button>
       </div>
     </div>

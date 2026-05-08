@@ -1,3 +1,4 @@
+import { memo } from 'react'
 import { cn } from '@/lib/utils'
 
 interface ProgressRingProps {
@@ -8,13 +9,22 @@ interface ProgressRingProps {
   className?: string
 }
 
-function ProgressRing({ progress, size = 120, strokeWidth = 6, color = '#2383E2', className }: ProgressRingProps) {
+const ProgressRing = memo(function ProgressRing({ progress, size = 120, strokeWidth = 6, color = '#2383E2', className }: ProgressRingProps) {
   const radius = (size - strokeWidth) / 2
   const circumference = 2 * Math.PI * radius
   const offset = circumference - Math.min(Math.max(progress, 0), 1) * circumference
 
   return (
-    <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className={cn('transform -rotate-90', className)}>
+    <svg
+      width={size}
+      height={size}
+      viewBox={`0 0 ${size} ${size}`}
+      className={cn('transform -rotate-90', className)}
+      role="progressbar"
+      aria-valuenow={Math.round(Math.min(Math.max(progress, 0), 1) * 100)}
+      aria-valuemin={0}
+      aria-valuemax={100}
+    >
       <circle cx={size / 2} cy={size / 2} r={radius} fill="none" stroke="#E9E9E7" strokeWidth={strokeWidth} />
       <circle
         cx={size / 2}
@@ -30,6 +40,6 @@ function ProgressRing({ progress, size = 120, strokeWidth = 6, color = '#2383E2'
       />
     </svg>
   )
-}
+})
 
 export { ProgressRing }

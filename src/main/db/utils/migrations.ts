@@ -130,17 +130,27 @@ export function runMigrations(db: Database): void {
   )`)
 
   const row = db.exec("SELECT value FROM settings WHERE key = 'schema_version'")
-  const currentVersion = row.length > 0 && row[0].values.length > 0
+  const parsed = row.length > 0 && row[0].values.length > 0
     ? parseInt(row[0].values[0][0] as string, 10)
     : 0
+  const currentVersion = isNaN(parsed) ? 0 : parsed
 
   for (const migration of MIGRATIONS) {
     if (migration.version > currentVersion) {
-      migration.run(db)
-      db.run(
-        "INSERT OR REPLACE INTO settings (key, value) VALUES ('schema_version', ?)",
-        [String(migration.version)]
-      )
+      try {
+        db.run('BEGIN')
+        migration.run(db)
+        db.run(
+          "INSERT OR REPLACE INTO settings (key, value) VALUES ('schema_version', ?)",
+          [String(migration.version)]
+        )
+        db.run('COMMIT')
+      } catch (e) {
+        console.error(`Migration ${migration.version} (${migration.name}) failed:`, e)
+        try { db.run('ROLLBACK') } catch { /* best effort */ }
+        // Stop at the failed migration so it can be retried on next launch
+        break
+      }
     }
   }
 }

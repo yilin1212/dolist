@@ -9,6 +9,7 @@ export default function PomodoroMini() {
   const { state, remainingSec, totalSec, kind, fetchState, pause, resume, stop, subscribe } = usePomodoroStore()
   const [size, setSize] = useState({ w: window.innerWidth || 260, h: window.innerHeight || 130 })
   const resizingRef = useRef<{ startX: number; startY: number; startW: number; startH: number } | null>(null)
+  const rafRef = useRef<number | null>(null)
 
   useEffect(() => {
     // Ensure the transparent BrowserWindow shows no white background.
@@ -50,7 +51,11 @@ export default function PomodoroMini() {
     if (!r) return
     const newW = r.startW + (e.screenX - r.startX)
     const newH = r.startH + (e.screenY - r.startY)
-    window.electronAPI.pomodoro.setMiniBounds(newW, newH)
+    // Throttle IPC to once per animation frame to avoid flooding the main process
+    if (rafRef.current) cancelAnimationFrame(rafRef.current)
+    rafRef.current = requestAnimationFrame(() => {
+      window.electronAPI.pomodoro.setMiniBounds(newW, newH).catch(() => {})
+    })
   }
 
   const onResizeEnd = (e: React.PointerEvent) => {
@@ -71,10 +76,17 @@ export default function PomodoroMini() {
   // Scale the timer ring with the available height to give a sense of "fitting"
   // when resized.
   const ringSize = Math.max(36, Math.min(80, size.h - 40))
-  const fontSize = Math.max(16, Math.min(32, size.h / 4))
+  // Cap font size by BOTH height and width so the digits never overrun the
+  // controls when the user makes the window narrow.
+  const fontSize = Math.max(14, Math.min(28, Math.min(size.h / 4, size.w / 9)))
+  // Hide the kind label entirely when the window is too narrow to fit it.
+  const showKindLabel = size.w >= 260
+  // At very narrow widths drop secondary controls (only keep stop+expand) so
+  // the timer digits stay readable instead of overlapping the buttons.
+  const compactControls = size.w < 260
 
-  const handleExpand = async () => {
-    await window.electronAPI.pomodoro.hideMini()
+  const handleExpand = () => {
+    window.electronAPI.pomodoro.hideMini().catch(() => {})
   }
 
   return (
@@ -94,7 +106,9 @@ export default function PomodoroMini() {
           {isActive ? (
             <>
               <span className="font-bold tabular-nums leading-tight" style={{ fontSize }}>{formatTime()}</span>
-              <span className="text-[10px] text-neutral-400 truncate">{kindLabel}</span>
+              {showKindLabel && (
+                <span className="text-[10px] text-neutral-400 truncate">{kindLabel}</span>
+              )}
             </>
           ) : (
             <span className="text-sm text-neutral-400">{t('pomodoro.noActive')}</span>
@@ -104,22 +118,24 @@ export default function PomodoroMini() {
 
       {/* Controls */}
       <div
-        className="flex items-center gap-1 flex-shrink-0"
+        className="flex items-center gap-1 flex-shrink-0 ml-2"
         style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}
       >
-        {isActive && (state === 'focusing' || state === 'break') && (
+        {!compactControls && isActive && (state === 'focusing' || state === 'break') && (
           <button
-            onClick={pause}
+            onClick={() => pause()}
             className="rounded p-1.5 text-neutral-400 hover:text-white hover:bg-neutral-700 transition-colors"
+            aria-label={t('pomodoro.pause')}
             title={t('pomodoro.pause')}
           >
             <Pause size={14} />
           </button>
         )}
-        {isActive && state === 'paused' && (
+        {!compactControls && isActive && state === 'paused' && (
           <button
-            onClick={resume}
+            onClick={() => resume()}
             className="rounded p-1.5 text-neutral-400 hover:text-white hover:bg-neutral-700 transition-colors"
+            aria-label={t('pomodoro.resume')}
             title={t('pomodoro.resume')}
           >
             <Play size={14} />
@@ -127,8 +143,9 @@ export default function PomodoroMini() {
         )}
         {isActive && (
           <button
-            onClick={stop}
+            onClick={() => stop().catch(() => {})}
             className="rounded p-1.5 text-neutral-400 hover:text-red-400 hover:bg-neutral-700 transition-colors"
+            aria-label={t('pomodoro.stop')}
             title={t('pomodoro.stop')}
           >
             <Square size={14} />
@@ -137,6 +154,7 @@ export default function PomodoroMini() {
         <button
           onClick={handleExpand}
           className="rounded p-1.5 text-neutral-400 hover:text-white hover:bg-neutral-700 transition-colors"
+          aria-label={t('pomodoro.expand') || t('common.close')}
           title={t('pomodoro.expand') || t('common.close')}
         >
           <Maximize2 size={14} />
@@ -149,9 +167,9 @@ export default function PomodoroMini() {
         onPointerMove={onResizeMove}
         onPointerUp={onResizeEnd}
         onPointerCancel={onResizeEnd}
-        className="absolute bottom-0 right-0 h-3.5 w-3.5 cursor-nwse-resize"
+        className="absolute bottom-0 right-0 h-5 w-5 cursor-nwse-resize"
         style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}
-        title="Drag to resize"
+        title={t('pomodoro.dragToResize')}
       >
         <svg viewBox="0 0 10 10" className="h-full w-full text-neutral-500">
           <path d="M9 1 L1 9 M9 4 L4 9 M9 7 L7 9" stroke="currentColor" strokeWidth="1" fill="none" />

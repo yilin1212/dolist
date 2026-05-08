@@ -15,6 +15,9 @@ module.exports = {
           foreground: 'hsl(var(--primary-foreground))',
           50: '#E8F2FC',
           100: '#C9E1F8',
+          200: '#A8CFF3',
+          300: '#7BB6EC',
+          400: '#4D9CE7',
           500: '#2383E2',
           600: '#1A6FC7',
           700: '#155CA8',
@@ -62,10 +65,12 @@ module.exports = {
         },
         success: {
           50: '#E6F4EA',
+          300: '#7BC79A',
           500: '#0F9D58',
         },
         warning: {
           50: '#FBEFE0',
+          300: '#F0BC7A',
           500: '#D9730D',
         },
         priority: {

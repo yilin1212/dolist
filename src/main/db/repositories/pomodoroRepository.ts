@@ -2,7 +2,9 @@ import { getDb, markDirty } from '../client'
 import { v4 as uuidv4 } from 'uuid'
 import type { PomodoroSession } from '../../../../types/models'
 
-function rowToSession(row: any[]): PomodoroSession {
+type SqlValue = string | number | null | Uint8Array
+
+function rowToSession(row: SqlValue[]): PomodoroSession {
   return {
     id: row[0] as string,
     task_id: row[1] as string | null,
@@ -42,6 +44,20 @@ export const PomodoroRepo = {
       [session.task_id, session.schedule_block_id, session.completed_at,
         session.actual_duration_minutes, session.status, session.id]
     )
+    markDirty()
+  },
+
+  updatePartial(id: string, fields: Partial<PomodoroSession>): void {
+    const setClauses: string[] = []
+    const params: (string | number | null)[] = []
+    for (const [key, value] of Object.entries(fields)) {
+      if (key === 'id') continue
+      setClauses.push(`${key}=?`)
+      params.push(value as string | number | null)
+    }
+    if (setClauses.length === 0) return
+    params.push(id)
+    getDb().run(`UPDATE pomodoro_sessions SET ${setClauses.join(',')} WHERE id=?`, params)
     markDirty()
   },
 

@@ -5,9 +5,15 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
 }
 
-export function formatMinutes(minutes: number): string {
-  if (minutes < 60) return `${minutes}min`
-  const h = Math.floor(minutes / 60)
-  const m = minutes % 60
-  return m === 0 ? `${h}h` : `${h}h${m}m`
+export function notifyTasksChanged(): void {
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('tasks:changed'))
+  }
+}
+
+export const PRIORITY_COLORS: Record<number, string> = {
+  1: 'bg-neutral-500',
+  2: 'bg-primary-500',
+  3: 'bg-warning-500',
+  4: 'bg-destructive-500',
 }

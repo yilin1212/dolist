@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Plus, Search } from 'lucide-react'
 import { useHotkeys } from 'react-hotkeys-hook'
 import { isSameDay, parseISO } from 'date-fns'
@@ -43,6 +43,9 @@ export default function TaskList({ title, subtitle, listFilter, showFilters = tr
     }
   }, [listFilter])
 
+  const handleEdit = useCallback((task: Task) => { setEditingTask(task); setShowForm(true) }, [])
+  const handleSchedule = useCallback((task: Task) => { setSchedulingTask(task) }, [])
+
   useHotkeys('ctrl+n, meta+n', (e) => {
     e.preventDefault()
     setEditingTask(null)
@@ -63,7 +66,7 @@ export default function TaskList({ title, subtitle, listFilter, showFilters = tr
 
   // Filter on the client by listFilter so we don't pollute the global store
   // filters (other views like Kanban / Matrix / Timeline read from the same store).
-  const scopedTasks = tasks.filter((task) => {
+  const scopedTasks = useMemo(() => tasks.filter((task) => {
     if (hideDone && (task.status === 'done' || task.status === 'cancelled')) return false
     if (!listFilter) return true
     if (listFilter === 'today') {
@@ -77,17 +80,17 @@ export default function TaskList({ title, subtitle, listFilter, showFilters = tr
       return false
     }
     return task.list === listFilter
-  })
+  }), [tasks, hideDone, listFilter, scheduledTodayIds])
 
-  const filteredTasks = scopedTasks.filter((task) => {
+  const filteredTasks = useMemo(() => scopedTasks.filter((task) => {
     if (filters.search) {
       const q = filters.search.toLowerCase()
-      if (!task.title.toLowerCase().includes(q) && !task.description.toLowerCase().includes(q)) {
+      if (!task.title.toLowerCase().includes(q) && !(task.description || '').toLowerCase().includes(q)) {
         return false
       }
     }
     return true
-  })
+  }), [scopedTasks, filters.search])
 
   return (
     <div className="flex h-full flex-col p-6">
@@ -104,6 +107,7 @@ export default function TaskList({ title, subtitle, listFilter, showFilters = tr
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-neutral-500" />
             <Input
               placeholder={t('common.search')}
+              aria-label={t('common.search')}
               className="pl-9"
               value={filters.search}
               onChange={(e) => setFilters({ search: e.target.value })}
@@ -133,8 +137,8 @@ export default function TaskList({ title, subtitle, listFilter, showFilters = tr
               <TaskItem
                 key={task.id}
                 task={task}
-                onEdit={(t) => { setEditingTask(t); setShowForm(true) }}
-                onSchedule={(t) => setSchedulingTask(t)}
+                onEdit={handleEdit}
+                onSchedule={handleSchedule}
               />
             ))}
           </div>

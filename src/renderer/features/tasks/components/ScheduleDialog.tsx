@@ -1,9 +1,10 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, memo } from 'react'
 import { format, differenceInMinutes, isToday, isTomorrow, parseISO } from 'date-fns'
 import { zhCN } from 'date-fns/locale'
 import type { Task } from '../../../../types/models'
 import { Button } from '../../../components/ui/button'
 import { Checkbox } from '../../../components/ui/checkbox'
+import { Input } from '../../../components/ui/input'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '../../../components/ui/dialog'
 import { useTranslation } from '../../../i18n'
 import { useScheduleStore } from '../../schedule/store'
@@ -21,7 +22,7 @@ interface ScheduleDialogProps {
   onScheduled: () => void
 }
 
-export default function ScheduleDialog({ open, task, onClose, onScheduled }: ScheduleDialogProps) {
+export default memo(function ScheduleDialog({ open, task, onClose, onScheduled }: ScheduleDialogProps) {
   const { t, locale } = useTranslation()
   const createBlock = useScheduleStore((s) => s.createBlock)
   const updateTaskInStore = useTaskStore((s) => s.updateTask)
@@ -81,7 +82,7 @@ export default function ScheduleDialog({ open, task, onClose, onScheduled }: Sch
 
   function formatGroupLabel(slots: TimeSlot[]): string {
     if (slots.length === 1) return formatSlotLabel(slots[0])
-    const header = t('schedule.totalPieces').replace('{n}', String(slots.length))
+    const header = t('schedule.totalPieces', { n: slots.length })
     const lines = [header]
     for (const s of slots) {
       lines.push(`     • ${formatSlotLabel(s)}`)
@@ -89,11 +90,13 @@ export default function ScheduleDialog({ open, task, onClose, onScheduled }: Sch
     return lines.join('\n')
   }
 
-  // Reset extend state on each open
+  // Reset state on each open
   useEffect(() => {
     if (open) {
       setExtendApplied(false)
       setExtendMinutes(30)
+      setSplitEnabled(false)
+      setNumPieces(2)
     }
   }, [open])
 
@@ -105,7 +108,7 @@ export default function ScheduleDialog({ open, task, onClose, onScheduled }: Sch
       try {
         const blocks = await window.electronAPI.schedule.listByTask(task.id)
         if (cancelled) return
-        const totalMin = blocks.reduce((sum: number, b: any) => {
+        const totalMin = blocks.reduce((sum: number, b: { start_time: string; end_time: string }) => {
           const s = parseISO(b.start_time).getTime()
           const e = parseISO(b.end_time).getTime()
           return sum + Math.max(0, Math.round((e - s) / 60000))
@@ -123,6 +126,11 @@ export default function ScheduleDialog({ open, task, onClose, onScheduled }: Sch
   const remaining = Math.max(0, estimated - scheduledMinutes)
   // The duration we want to schedule: either the leftover, or the user-extended amount.
   const targetDuration = extendApplied ? extendMinutes : remaining
+  // Need user to provide a duration before we can recommend slots:
+  //   - estimated=0:           task has no duration set yet
+  //   - remaining<=0:          everything is already scheduled
+  // In both cases we show the "extend" UI so the user can dial in a duration.
+  const needsDuration = (estimated <= 0 || remaining <= 0) && !extendApplied
 
   useEffect(() => {
     if (!open || !task) return
@@ -166,14 +174,16 @@ export default function ScheduleDialog({ open, task, onClose, onScheduled }: Sch
     setScheduling(true)
     try {
       const slots = candidateGroups[selectedIndex]
-      for (const slot of slots) {
-        await createBlock({
-          task_id: task.id,
-          start_time: slot.start,
-          end_time: slot.end,
-          status: 'pending',
-        })
-      }
+      await Promise.all(
+        slots.map((slot) =>
+          createBlock({
+            task_id: task.id,
+            start_time: slot.start,
+            end_time: slot.end,
+            status: 'pending',
+          })
+        )
+      )
       // If we extended the estimate, persist the new total so future re-schedules
       // correctly reflect the user's commitment.
       if (extendApplied && extendMinutes > 0) {
@@ -200,7 +210,9 @@ export default function ScheduleDialog({ open, task, onClose, onScheduled }: Sch
     return hours > 0 ? `${hours}h${mins > 0 ? mins + 'm' : ''}` : `${mins}m`
   }
 
-  const fullyScheduled = remaining <= 0 && !extendApplied
+  const fullyScheduled = needsDuration
+
+  if (!task) return null
 
   return (
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
@@ -227,16 +239,21 @@ export default function ScheduleDialog({ open, task, onClose, onScheduled }: Sch
           {/* Already fully scheduled — offer extension */}
           {fullyScheduled && (
             <div className="rounded-lg border border-warning-200 bg-warning-50 p-3 text-sm">
-              <p className="font-medium text-warning-700">{t('schedule.fullyScheduled')}</p>
-              <p className="mt-1 text-xs text-warning-600">{t('schedule.extendHint')}</p>
+              <p className="font-medium text-warning-700">
+                {estimated <= 0 ? t('schedule.noDuration') : t('schedule.fullyScheduled')}
+              </p>
+              <p className="mt-1 text-xs text-warning-600">
+                {estimated <= 0 ? t('schedule.setDurationHint') : t('schedule.extendHint')}
+              </p>
               <div className="mt-2 flex items-center gap-2">
-                <input
+                <Input
                   type="number"
                   min={5}
                   step={5}
                   value={extendMinutes}
-                  onChange={(e) => setExtendMinutes(Math.max(5, Number(e.target.value)))}
-                  className="w-20 rounded-md border border-neutral-200 px-2 py-1 text-sm text-center"
+                  onChange={(e) => setExtendMinutes(Math.max(5, Number(e.target.value) || 5))}
+                  className="w-20 text-center"
+                  aria-label={t('schedule.extendMinutes')}
                 />
                 <span className="text-xs text-neutral-600">{t('schedule.minutes')}</span>
                 <Button size="sm" onClick={() => setExtendApplied(true)}>
@@ -258,13 +275,14 @@ export default function ScheduleDialog({ open, task, onClose, onScheduled }: Sch
               </label>
               {splitEnabled && (
                 <div className="flex items-center gap-1.5">
-                  <input
+                  <Input
                     type="number"
                     min={2}
                     max={8}
                     value={numPieces}
-                    onChange={(e) => setNumPieces(Math.max(2, Math.min(8, Number(e.target.value))))}
-                    className="w-16 rounded-md border border-neutral-200 px-2 py-1 text-sm text-center"
+                    onChange={(e) => setNumPieces(Math.max(2, Math.min(8, Number(e.target.value) || 2)))}
+                    className="w-16 text-center"
+                    aria-label={t('schedule.pieces')}
                   />
                   <span className="text-sm text-neutral-600">{t('schedule.pieces')}</span>
                 </div>
@@ -324,4 +342,4 @@ export default function ScheduleDialog({ open, task, onClose, onScheduled }: Sch
       </DialogContent>
     </Dialog>
   )
-}
+})

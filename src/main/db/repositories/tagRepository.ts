@@ -24,6 +24,7 @@ export const TagRepo = {
   },
 
   delete(id: string): void {
+    getDb().run('DELETE FROM task_tags WHERE tag_id = ?', [id])
     getDb().run('DELETE FROM tags WHERE id = ?', [id])
     markDirty()
   },

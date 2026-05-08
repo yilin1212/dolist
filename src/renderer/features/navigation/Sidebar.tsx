@@ -1,8 +1,10 @@
+import { memo } from 'react'
 import { NavLink } from 'react-router-dom'
 import {
   Inbox,
   Sun,
   CalendarDays,
+  CalendarClock,
   Columns3,
   GanttChart,
   Grid2x2,
@@ -15,13 +17,13 @@ import {
 import { cn } from '../../lib/utils'
 import { useTranslation } from '../../i18n'
 
-export default function Sidebar() {
+export default memo(function Sidebar() {
   const { t } = useTranslation()
 
   const navItems = [
     { path: '/inbox', label: t('nav.inbox'), icon: Inbox },
     { path: '/today', label: t('nav.today'), icon: Sun },
-    { path: '/upcoming', label: t('nav.upcoming'), icon: CalendarDays },
+    { path: '/upcoming', label: t('nav.upcoming'), icon: CalendarClock },
     { divider: true },
     { path: '/calendar', label: t('nav.calendar'), icon: CalendarDays },
     { path: '/kanban', label: t('nav.kanban'), icon: Columns3 },
@@ -45,7 +47,7 @@ export default function Sidebar() {
       <div className="flex flex-col gap-0.5">
         {navItems.map((item, i) => {
           if ('divider' in item && item.divider) {
-            return <div key={i} className="my-2 h-px bg-neutral-150" />
+            return <div key={i} role="separator" className="my-2 h-px bg-neutral-150" />
           }
           if (!('path' in item)) return null
           const Icon = item.icon!
@@ -75,11 +77,14 @@ export default function Sidebar() {
           <span className="text-[11px] font-semibold uppercase tracking-wider text-neutral-500">
             {t('nav.projects')}
           </span>
-          <button className="rounded p-0.5 text-neutral-500 hover:bg-neutral-150 hover:text-neutral-900">
+          <button className="rounded p-0.5 text-neutral-500 hover:bg-neutral-150 hover:text-neutral-900"
+            aria-label={t('nav.projects')}
+            title={t('nav.projects')}
+          >
             <ChevronRight size={14} />
           </button>
         </div>
       </div>
     </nav>
   )
-}
+})

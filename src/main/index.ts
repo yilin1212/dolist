@@ -1,7 +1,15 @@
 import { app, BrowserWindow, globalShortcut, ipcMain } from 'electron'
 import { join } from 'path'
 const isDev = !app.isPackaged
-import { initDatabase } from './db/client'
+
+// Allow E2E tests to redirect the on-disk database / settings to a temp dir so
+// they never touch the user's real DoList data. Must be applied before any
+// app.whenReady() consumer (e.g. db/client) reads getPath('userData').
+if (process.env['DOLIST_USER_DATA']) {
+  app.setPath('userData', process.env['DOLIST_USER_DATA'])
+}
+
+import { initDatabase, saveToDisk, closeDatabase } from './db/client'
 import { registerTaskIpc } from './ipc/taskIpc'
 import { registerCategoryIpc } from './ipc/categoryIpc'
 import { registerTagIpc } from './ipc/tagIpc'
@@ -16,25 +24,12 @@ import { PomodoroTimer } from './pomodoro/timer'
 let mainWindow: BrowserWindow | null = null
 let pomodoroTimer: PomodoroTimer | null = null
 
-function createWindow(): void {
-  mainWindow = new BrowserWindow({
-    width: 1240,
-    height: 820,
-    minWidth: 1000,
-    minHeight: 680,
-    frame: false,
-    show: false,
-    webPreferences: {
-      preload: join(__dirname, '../preload/index.js'),
-      nodeIntegration: false,
-      contextIsolation: true,
-    },
-  })
+const MAIN_WINDOW_W = 1240
+const MAIN_WINDOW_H = 820
+const MAIN_WINDOW_MIN_W = 1000
+const MAIN_WINDOW_MIN_H = 680
 
-  mainWindow.on('ready-to-show', () => {
-    mainWindow!.show()
-  })
-
+function registerWindowIpc(): void {
   ipcMain.on('window:minimize', () => mainWindow?.minimize())
   ipcMain.on('window:maximize', () => {
     if (mainWindow?.isMaximized()) {
@@ -55,12 +50,34 @@ function createWindow(): void {
   ipcMain.on('window:hide', () => {
     mainWindow?.hide()
   })
+}
 
-  if (isDev && process.env['ELECTRON_RENDERER_URL']) {
-    mainWindow.loadURL(process.env['ELECTRON_RENDERER_URL'])
-  } else {
-    mainWindow.loadFile(join(__dirname, '../renderer/index.html'))
-  }
+function createWindow(): void {
+  mainWindow = new BrowserWindow({
+    width: MAIN_WINDOW_W,
+    height: MAIN_WINDOW_H,
+    minWidth: MAIN_WINDOW_MIN_W,
+    minHeight: MAIN_WINDOW_MIN_H,
+    frame: false,
+    show: false,
+    icon: join(__dirname, '../../resources/icon.png'),
+    webPreferences: {
+      preload: join(__dirname, '../preload/index.js'),
+      nodeIntegration: false,
+      contextIsolation: true,
+    },
+  })
+
+  mainWindow.on('ready-to-show', () => {
+    mainWindow?.show()
+  })
+
+  const loadPromise = isDev && process.env['ELECTRON_RENDERER_URL']
+    ? mainWindow.loadURL(process.env['ELECTRON_RENDERER_URL'])
+    : mainWindow.loadFile(join(__dirname, '../renderer/index.html'))
+  loadPromise.catch((e) => {
+    console.error('Failed to load main window:', e)
+  })
 }
 
 app.whenReady().then(async () => {
@@ -76,6 +93,8 @@ app.whenReady().then(async () => {
   registerPomodoroIpc(pomodoroTimer)
   registerSchedulerIpc()
 
+  registerWindowIpc()
+
   startReminderService(pomodoroTimer)
 
   createWindow()
@@ -84,7 +103,7 @@ app.whenReady().then(async () => {
     createTray(mainWindow)
   }
 
-  globalShortcut.register('CommandOrControl+Shift+D', () => {
+  const registered = globalShortcut.register('CommandOrControl+Shift+D', () => {
     if (mainWindow) {
       if (mainWindow.isVisible()) {
         mainWindow.hide()
@@ -94,6 +113,9 @@ app.whenReady().then(async () => {
       }
     }
   })
+  if (!registered) {
+    console.warn('Failed to register global shortcut Ctrl+Shift+D')
+  }
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
@@ -110,4 +132,5 @@ app.on('window-all-closed', () => {
 
 app.on('will-quit', () => {
   globalShortcut.unregisterAll()
+  closeDatabase()
 })

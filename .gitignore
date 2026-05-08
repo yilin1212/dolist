@@ -1,6 +1,9 @@
 node_modules/
 out/
 dist/
+release/
+.vite/
+.stage/
 *.db
 *.db-journal
 .DS_Store
